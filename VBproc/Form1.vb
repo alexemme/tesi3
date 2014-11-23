@@ -160,7 +160,7 @@ Public Class Form1
                             'devo controllare che il verso della strada sia uguale a quello originale , ergo 
                             'l'ultimo nodo della lista deve essere quello vicino all'incrocio
 
-
+                            Dim prova As Integer = 0
 
                         Next
 
