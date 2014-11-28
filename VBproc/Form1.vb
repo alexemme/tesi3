@@ -69,10 +69,12 @@ Public Class Form1
                             j += 2
                         Next
 
-                        'TESTTESTESTESTE
-                        ReDim links(0)
+                        'TESTTESTESTESTE ################################################
+                        ReDim links(1)
                         links(0) = "-121677300_0"
+                        links(1) = "121677300_0"
                         ' fine test
+                        '################################
 
 
                         txtDebug.Text &= "Lunghezza Strade adiacenti l'incrocio di interesse: " & vbCrLf
@@ -110,15 +112,15 @@ Public Class Form1
                             'devo individuare i nodi che non mi servono
                                 Dim inizio, f, s As Short
                                 Dim distanza As Double
-                                If verso = False Then
-                                    inizio = 0
-                                    f = punti.Length - 1 - 1
-                                    s = 1
-                                Else
-                                    inizio = punti.Length - 1
-                                    f = 1
-                                    s = -1
-                                End If
+                            'If verso = False Then
+                            inizio = 0
+                            f = punti.Length - 1 - 1
+                            s = 1
+                            'Else
+                            '    inizio = punti.Length - 1
+                            '    f = 1
+                            '    s = -1
+                            'End If
                                 Dim pi As Punto
                                 Dim pf As Punto
                             Dim puntiSTRMod As String = "" ' la stringa finale modificata da reinserire nel file .net.xml
@@ -136,12 +138,14 @@ Public Class Form1
                                 If distanza > 50 Then
                                     'arrivato qui dentro ho trovato l'ultimo punto da modificare
                                     Dim punto As Punto = calcLastPoint(pi, pf, 50 - diff)
+                                    pf.X = punto.X
+                                    pf.Y = punto.Y
                                     puntiSTRMod &= punto.X.ToString("#.##").Replace(",", ".") & _
                                     "," & punto.Y.ToString("#.##").Replace(",", ".") & " "
                                     distanza = 50
                                     Exit For
                                 End If
-                                    diff = distanza
+                                diff = distanza
                                 puntiSTRMod &= pf.X.ToString("#.##").Replace(",", ".") & _
                                     "," & pf.Y.ToString("#.##").Replace(",", ".") & " "
                                 Next
@@ -151,16 +155,20 @@ Public Class Form1
                                     "," & punto.Y.ToString("#.##").Replace(",", ".") & " "
                             End If
 
+                            If pf.X <> pta.X And pf.Y <> pta.Y Then
+                                'se l'ultimo punto della lista non e' quello vicino all'incrocio allora devo 
+                                ' invertire l'ordine di tutti i punti 
+                                puntiSTRMod = invertiPunti(puntiSTRMod)
 
+                            End If
                             m_node1.Attributes.GetNamedItem("shape").Value = puntiSTRMod
-                            m_node1.Attributes.GetNamedItem("lenght").Value = "50"
-                            'TODO calcolare l'equazione dellaretta passante per gli ultimi due punti  e impostare la 
-                            'lunghezza del tratto come 50 - diff , trovo cosi l'ultimo punto e aggiorno la string MOD .
-
+                            m_node1.Attributes.GetNamedItem("length").Value = "50"
                             'devo controllare che il verso della strada sia uguale a quello originale , ergo 
                             'l'ultimo nodo della lista deve essere quello vicino all'incrocio
 
-                            Dim prova As Integer = 0
+
+
+
 
                         Next
 

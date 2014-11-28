@@ -32,4 +32,16 @@ Module moduloFunzioni
         PX.Y = m * PX.X + q
         Return PX
     End Function
+
+    Public Function invertiPunti(stringaPunti As String) As String
+        Dim punti() As String = stringaPunti.Split(" ")
+        Dim nuovastringa As String = ""
+        For i = punti.Count - 1 To 0 Step -1
+            nuovastringa &= punti(i)
+            If i <> 0 Then
+                nuovastringa &= " "
+            End If
+        Next
+        Return nuovastringa
+    End Function
 End Module
