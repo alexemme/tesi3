@@ -69,13 +69,6 @@ Public Class Form1
                             j += 2
                         Next
 
-                        'TESTTESTESTESTE ################################################
-                        ReDim links(1)
-                        links(0) = "-121677300_0"
-                        links(1) = "121677300_0"
-                        ' fine test
-                        '################################
-
 
                         txtDebug.Text &= "Lunghezza Strade adiacenti l'incrocio di interesse: " & vbCrLf
                         For i = 0 To links.Count - 1
@@ -105,39 +98,30 @@ Public Class Form1
                             pta.Y = punti(0).Y
                             ptb.X = punti(punti.Length - 1).X
                             ptb.Y = punti(punti.Length - 1).Y
-                            Dim verso As Boolean = ordinaPuntiMIN(ptJunct, pta, ptb)
+                            Dim verso As Boolean = ordinaPuntiMIN(ptJunct, punti)
                             ' con questa funzione  ordino i punti estremali della strada, ptA e' sempre il pt vicino all'incrocio
                             ' inoltre mi restituisce il verso della successione di nodi rispetto l'incrocio T
                             'True se il verso e' opposto 
                             'devo individuare i nodi che non mi servono
-                                Dim inizio, f, s As Short
-                                Dim distanza As Double
-                            'If verso = False Then
-                            inizio = 0
-                            f = punti.Length - 1 - 1
-                            s = 1
-                            'Else
-                            '    inizio = punti.Length - 1
-                            '    f = 1
-                            '    s = -1
-                            'End If
-                                Dim pi As Punto
-                                Dim pf As Punto
+                            Dim distanza As Double
+                            Dim pi As Punto
+                            Dim pf As Punto
                             Dim puntiSTRMod As String = "" ' la stringa finale modificata da reinserire nel file .net.xml
                             Dim diff As Double
+                            distanza = 0
+                            puntiSTRMod &= punti(0).X.ToString("#.##").Replace(",", ".") & _
+                                        "," & punti(0).Y.ToString("#.##").Replace(",", ".") & " "
+                            For j = 0 To punti.Length - 2
+                                'calcolo iterativamente la distanza dal punto iniziale 
+                                pi.X = punti(j).X
+                                pi.Y = punti(j).Y
+                                pf.X = punti(j + 1).X
+                                pf.Y = punti(j + 1).Y
 
-                            puntiSTRMod &= punti(inizio).X.ToString("#.##").Replace(",", ".") & _
-                                        "," & punti(inizio).Y.ToString("#.##").Replace(",", ".") & " "
-                                For j = inizio To f Step s
-                                    'calcolo iterativamente la distanza dal punto iniziale 
-                                    pi.X = punti(j).X
-                                    pi.Y = punti(j).Y
-                                    pf.X = punti(j + s).X
-                                    pf.Y = punti(j + s).Y
-                                    distanza += Math.Sqrt((pi.X - pf.X) ^ 2 + (pi.Y - pf.Y) ^ 2)
+                                distanza += Math.Sqrt((pi.X - pf.X) ^ 2 + (pi.Y - pf.Y) ^ 2)
                                 If distanza > 50 Then
                                     'arrivato qui dentro ho trovato l'ultimo punto da modificare
-                                    Dim punto As Punto = calcLastPoint(pi, pf, 50 - diff)
+                                    Dim punto As Punto = calcLastPoint(pi, pf, 50 - distanza)
                                     pf.X = punto.X
                                     pf.Y = punto.Y
                                     puntiSTRMod &= punto.X.ToString("#.##").Replace(",", ".") & _
@@ -148,18 +132,17 @@ Public Class Form1
                                 diff = distanza
                                 puntiSTRMod &= pf.X.ToString("#.##").Replace(",", ".") & _
                                     "," & pf.Y.ToString("#.##").Replace(",", ".") & " "
-                                Next
+                            Next
                             If distanza < 50 Then ' se sono uscito dal loop senza effettuare modifiche
                                 Dim punto As Punto = calcLastPoint(pi, pf, 50 - distanza) ' in teoria lo allunga
                                 puntiSTRMod &= punto.X.ToString("#.##").Replace(",", ".") & _
                                     "," & punto.Y.ToString("#.##").Replace(",", ".") & " "
                             End If
 
-                            If pf.X <> pta.X And pf.Y <> pta.Y Then
+                            If verso = True Then
                                 'se l'ultimo punto della lista non e' quello vicino all'incrocio allora devo 
                                 ' invertire l'ordine di tutti i punti 
                                 puntiSTRMod = invertiPunti(puntiSTRMod)
-
                             End If
                             m_node1.Attributes.GetNamedItem("shape").Value = puntiSTRMod
                             m_node1.Attributes.GetNamedItem("length").Value = "50"
