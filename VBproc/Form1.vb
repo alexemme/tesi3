@@ -3,6 +3,7 @@ Imports System.Xml
 
 Public Class Form1
 
+
     Public Sub SalvaSetts()
         SaveSetting("VBproc", "PercFiles", "xml1", txtPerc1.Text)
         SaveSetting("VBproc", "PercFiles", "xml2", txtPercSave.Text)
@@ -62,13 +63,15 @@ Public Class Form1
                         'devo considerare tutte le direzioni dei links inclusi
                         Dim buff() As String = links
                         ReDim links(links.Count * 2 - 1)
+                        ReDim puntiJunction(links.Count * 2 - 1, 1)  ' qui salvo i punti della junction man mano che li trovo
+                        ReDim versi(links.Count * 2 - 1) 'qui dentro mi segno i versi delle junction
                         Dim j As Short = 0
+
                         For i = 0 To buff.Length - 1
                             links(j) = buff(i).Replace("-", "")
                             links(j + 1) = "-" & buff(i).Replace("-", "")
                             j += 2
                         Next
-
 
                         txtDebug.Text &= "Lunghezza Strade adiacenti l'incrocio di interesse: " & vbCrLf
                         For i = 0 To links.Count - 1
@@ -121,7 +124,7 @@ Public Class Form1
                                 distanza += Math.Sqrt((pi.X - pf.X) ^ 2 + (pi.Y - pf.Y) ^ 2)
                                 If distanza > 50 Then
                                     'arrivato qui dentro ho trovato l'ultimo punto da modificare
-                                    Dim punto As Punto = calcLastPoint(pi, pf, 50 - distanza)
+                                    Dim punto As Punto = calcLastPoint(pi, pf, 50 - distanza, verso, i)
                                     pf.X = punto.X
                                     pf.Y = punto.Y
                                     puntiSTRMod &= punto.X.ToString("#.##").Replace(",", ".") & _
@@ -134,7 +137,7 @@ Public Class Form1
                                     "," & pf.Y.ToString("#.##").Replace(",", ".") & " "
                             Next
                             If distanza < 50 Then ' se sono uscito dal loop senza effettuare modifiche
-                                Dim punto As Punto = calcLastPoint(pi, pf, 50 - distanza) ' in teoria lo allunga
+                                Dim punto As Punto = calcLastPoint(pi, pf, 50 - distanza, verso, i) ' in teoria lo allunga
                                 puntiSTRMod &= punto.X.ToString("#.##").Replace(",", ".") & _
                                     "," & punto.Y.ToString("#.##").Replace(",", ".") & " "
                             End If
@@ -146,8 +149,8 @@ Public Class Form1
                             End If
                             m_node1.Attributes.GetNamedItem("shape").Value = puntiSTRMod
                             m_node1.Attributes.GetNamedItem("length").Value = "50"
-                            'devo controllare che il verso della strada sia uguale a quello originale , ergo 
-                            'l'ultimo nodo della lista deve essere quello vicino all'incrocio
+
+                            ' costruzione della junction :
 
 
 
@@ -155,6 +158,29 @@ Public Class Form1
 
                         Next
 
+
+                        Dim lnkA As String, lnkB As String 'metto in ordine la stringa , lnkA va per primo
+                        For j = 0 To links.Length - 1 Step 2
+                            ' devo trovare la junction 
+
+                            Dim m_nodeJ As XmlNode = m_net.SelectSingleNode("//junction[@incLanes='" & _
+                                    links(j) & "']")
+                            If IsNothing(m_nodeJ) Then
+                                m_nodeJ = m_net.SelectSingleNode("//junction[@incLanes='" & _
+                                    links(j + 1) & "']")
+                            End If
+                            If versi(j) = True Then
+                                lnkA = puntiJunction(j, 0) & " " & puntiJunction(j, 1)
+                            Else
+                                lnkB = puntiJunction(j, 0) & " " & puntiJunction(j, 1)
+                            End If
+                            If versi(j + 1) = True Then
+                                lnkA = puntiJunction(j + 1, 0) & " " & puntiJunction(j + 1, 1)
+                            Else
+                                lnkB = puntiJunction(j + 1, 0) & " " & puntiJunction(j + 1, 1)
+                            End If
+                            m_nodeJ.Attributes.GetNamedItem("shape").Value = lnkA & " " & lnkB
+                        Next
                     End If
                     'If links.Count = 1 Then
                     '    m_net.RemoveChild(m_node) ' se volessi rimuovere un nodo,
@@ -179,7 +205,11 @@ Public Class Form1
         'txtDebug.Text &= punto.ToString & vbCrLf
         ' Dim dist2 = Math.Sqrt((350 - punto.X) ^ 2 + (456 - punto.Y) ^ 2)
         'txtDebug.Text &= "dist " & dist & " --> " & dist2 & vbCrLf
-
-
+        Dim x1 As Double = 123.61
+        Dim y1 As Double = 48.92
+        Dim x2 As Double = 123.33
+        Dim y2 As Double = 45.63
+        Dim dist As Double = Math.Sqrt((x1 - x2) ^ 2 + (y1 - y2) ^ 2)
+        txtDebug.Text &= dist & vbCrLf
     End Sub
 End Class

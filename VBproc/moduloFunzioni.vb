@@ -2,7 +2,12 @@
     Dim X As Double
     Dim Y As Double
 End Structure
+
+
 Module moduloFunzioni
+    Public puntiJunction(,) As String ' qui salvo i punti della junction man mano che li trovo
+    Public versi() As Boolean
+
     'Public Function ordinaPuntiMIN(ByVal puntoJunction As Punto, ByRef puntoA As Punto, ByRef puntoB As Punto) As Boolean
     '    ' questa funzione mi ordina i due punti in modo che puntoA sia sempre quello a distanza minore da puntoJunct
     '    Dim distA, distB As Double
@@ -40,7 +45,8 @@ Module moduloFunzioni
         End If
         Return False
     End Function
-    Public Function calcLastPoint(ByVal p2 As Punto, ByVal p1 As Punto, diff As Double) As Punto
+    Public Function calcLastPoint(ByVal p2 As Punto, ByVal p1 As Punto, diff As Double, verso As Boolean, indiceJunct As Short) As Punto
+        'calcolo sia il punto finale che i due punti che faranno parte della junction all'estremo
         Dim PX As Punto
         Dim m As Double = (p2.Y - p1.Y) / (p2.X - p1.X)
         Dim q As Double = p1.Y - m * p1.X
@@ -69,8 +75,27 @@ Module moduloFunzioni
         End If
         PX.Y = m * PX.X + q
 
+        'ora calcolo i punti della junction 
+        diff = 1.6
+        m = -1 / m
+        q = -m * PX.X + PX.Y
+        a = (1 + m ^ 2)
+        b = (-2 * PX.X + 2 * m * (q - PX.Y))
+        c = PX.X ^ 2 + (q - PX.Y) ^ 2 - diff ^ 2
+        x1 = (-b - Math.Sqrt(b ^ 2 - 4 * a * c)) / (2 * a)
+        Dim y1 As Double = m * x1 + q
+        x2 = (-b + Math.Sqrt(b ^ 2 - 4 * a * c)) / (2 * a)
+        Dim y2 As Double = m * x2 + q
+
+        Dim ax As Short = Math.Abs(indiceJunct / 2)
+        puntiJunction(indiceJunct, 0) = x1.ToString("#.##").Replace(",", ".") & "," & y1.ToString("#.##").Replace(",", ".") ' salvo i punti in un buffer 
+        puntiJunction(indiceJunct, 1) = x2.ToString("#.##").Replace(",", ".") & "," & y2.ToString("#.##").Replace(",", ".") ' e li assemblo dopo su form1
+        versi(indiceJunct) = verso ' mi devo ricordare del verso
         Return PX
     End Function
+
+
+
 
     Public Function invertiPunti(stringaPunti As String) As String
         Dim punti() As String = stringaPunti.Split(" ")
