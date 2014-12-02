@@ -152,10 +152,6 @@ Public Class Form1
 
                             ' costruzione della junction :
 
-
-
-
-
                         Next
 
 
@@ -182,17 +178,63 @@ Public Class Form1
                             m_nodeJ.Attributes.GetNamedItem("shape").Value = lnkA & " " & lnkB
                         Next
                     End If
-                    'If links.Count = 1 Then
-                    '    m_net.RemoveChild(m_node) ' se volessi rimuovere un nodo,
-                    'End If
                 End If
             Next
+            'TODO , gestione delle svolte al semaforo , per ora sorvolo e lascio a SUMO il compito di regolarle
 
-            'TODO , eliminare le internal lanes edges dell'incrocio che non esiste piu' e inoltre tutte le referenze
-            'se non funziona , occorre semplicemente allungare /accorciaere le strade e mettere i nuovi punti al termine 
-            'di quelle strade!
-            m_xmld.Save(txtPercSave.Text) 'salvo il file in una nuova posizione
+
+            'da qui in poi genero il routefile con le informazioni su ogni automobile che passa sull'incrocio nell'arco di tempo considerato
+            'creo il nuovo file per la generazione di tutti i percorsi di tutte le automobili della simulazione 
+            Dim filepath As String = Path.GetDirectoryName(txtPerc1.Text)
+            Dim filename As String = Path.GetFileNameWithoutExtension(txtPerc1.Text)
+            Dim nuovofile As String = filepath & "/" & filename & ".rou.xml"
+            If Not System.IO.File.Exists(nuovofile) Then
+                System.IO.File.Create(nuovofile).Dispose()
+            End If
+            Dim objWriter As New System.IO.StreamWriter(nuovofile, True)
+            Dim stringOUTPUT As String = "<routes>" & vbCrLf
+            'definisco come sono fatte le auto QUI
+            stringOUTPUT &= "<vType id=""Auto1"" accel=""0.8"" decel=""4.5"" sigma=""0.5"" length=""5"" minGap=""2.5"" maxSpeed=""16.67"" guiShape=""passenger""/>" & vbCrLf & vbCrLf
+            'definisco tutte le possibili svolte QUI 
+            ' queste sono tutte le possibili combinazioni I-O , sono le stesse informazioni che avrei sul file net.xml
+            'di sumo , semplicemente le riporto qui nel giusto formato . Sono tutte le connection con state "o"
+            m_nodelist = m_xmld.SelectNodes("net/connection")
+            Dim rouNUM As Short = 0
+            For Each m_node In m_nodelist
+                Dim fromAttr = m_node.Attributes.GetNamedItem("from").Value
+                Dim toAttr = m_node.Attributes.GetNamedItem("to").Value
+                Dim stateAttr = m_node.Attributes.GetNamedItem("state").Value
+                If stateAttr = "o" Then ' devo includerlo nel file ROU.XML
+                    stringOUTPUT &= "<route id=""route" & rouNUM & """ edges=""" & fromAttr & " " & toAttr & """ />" & vbCrLf & vbCrLf
+                End If
+                rouNUM += 1
+            Next
+            'definisco OGNI POSSIBILE autoveicolo che attraversa la junction secondo una distribuzione definita 
+            Dim numCICLI As Short = 3600 'TEST , devo sceglierlo a runtime
+            'per ogni direzione ho diverse probabilita' 
+            Dim probGlobale As Double = 1 / 20 ' ipotizzo per ora la stessa probabilita' su ogni OD TEST
+            Dim rand As New Random() ' qui andrebbe specificato il SEED se occorre
+            Randomize()
+            Dim veicNUM As Short = 0
+            For i = 1 To numCICLI
+                For j = 0 To rouNUM
+                    If rand.NextDouble < probGlobale Then ' allora devo inserire la car nel circuito
+                        '<vehicle id="left_0" type="typeWE" route="left" depart="0" />
+                        stringOUTPUT &= "<vehicle id=""veic_" & veicNUM & " type=""auto1"" route=""route" & j & _
+                            """ depart=""" & i & """ />" & vbCrLf
+                    End If
+                Next
+            Next
+            stringOUTPUT &= "</routes>"
+            'ho concluso la costruzione del file 
+
+
+            objWriter.WriteLine(stringOUTPUT) 'salvo  file .rou.xml e lo chiudo 
+            objWriter.Close()
+            m_xmld.Save(txtPercSave.Text) 'salvo il file .net.xml in una nuova posizione
             txtDebug.Text &= "File output salvato!" & vbCrLf
+
+            'arrivato qui devo inizializzare sumo attraverso python , in quanto le librerie traci non sono compatibili con .net
         Catch errorVariable As Exception
             txtDebug.Text &= "Errore XML: " & (errorVariable.ToString()) & vbCrLf
         End Try
@@ -205,11 +247,21 @@ Public Class Form1
         'txtDebug.Text &= punto.ToString & vbCrLf
         ' Dim dist2 = Math.Sqrt((350 - punto.X) ^ 2 + (456 - punto.Y) ^ 2)
         'txtDebug.Text &= "dist " & dist & " --> " & dist2 & vbCrLf
-        Dim x1 As Double = 123.61
-        Dim y1 As Double = 48.92
-        Dim x2 As Double = 123.33
-        Dim y2 As Double = 45.63
-        Dim dist As Double = Math.Sqrt((x1 - x2) ^ 2 + (y1 - y2) ^ 2)
-        txtDebug.Text &= dist & vbCrLf
+
+
+        'Dim x1 As Double = 123.61
+        'Dim y1 As Double = 48.92
+        'Dim x2 As Double = 123.33
+        'Dim y2 As Double = 45.63
+        'Dim dist As Double = Math.Sqrt((x1 - x2) ^ 2 + (y1 - y2) ^ 2)
+        'txtDebug.Text &= dist & vbCrLf
+
+
+        'provo a richiamare python
+        Dim filenamePY As String = Path.Combine(Directory.GetParent(System.IO.Directory.GetCurrentDirectory()).Parent.Parent.Parent.FullName)
+        filenamePY = filenamePY & "\VBproc\PythonScript\PythonScript.py"
+        Dim scriptPY As New System.Diagnostics.Process
+        scriptPY = System.Diagnostics.Process.Start(filenamePY)
+
     End Sub
 End Class
