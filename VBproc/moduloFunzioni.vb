@@ -108,4 +108,30 @@ Module moduloFunzioni
         Next
         Return nuovastringa
     End Function
+
+    Public Sub creaFileCfg(nomefile As String)
+        Dim filepath1 As String = IO.Path.GetDirectoryName(Form1.txtPercSave.Text)
+        Dim filename1 As String = IO.Path.GetFileNameWithoutExtension(Form1.txtPercSave.Text)
+        Dim pospto As Short = Strings.InStr(filename1, ".") ' rimuovo la seconda parte di estensione se e' presente 
+        If pospto > 0 Then
+            filename1 = filename1.Remove(pospto - 1)
+        End If
+        Dim nuovofile As String = filepath1 & "/" & filename1 & ".sumocfg"
+        If Not System.IO.File.Exists(nuovofile) Then
+            System.IO.File.Create(nuovofile).Dispose()
+        Else
+            IO.File.Delete(nuovofile)
+        End If
+        Dim objWriter As New System.IO.StreamWriter(nuovofile, True)
+        Dim stringOUTPUT As String = "<configuration>" & vbCrLf & "<input>" & _
+            vbCrLf & "<net-file value=""" & nomefile & ".net.xml""/>" & vbCrLf & _
+         "<route-files value=""" & nomefile & ".rou.xml""/>" & vbCrLf & _
+         "</input>" & vbCrLf & "<time>" & vbCrLf & "<begin value=""0""/>" & vbCrLf & _
+        "</time>" & vbCrLf & "<report>" & vbCrLf & "<verbose value=""true""/>" & vbCrLf & _
+        "<no-step-log value=""true""/>" & vbCrLf & "</report>" & vbCrLf & _
+        "</configuration>"
+        objWriter.WriteLine(stringOUTPUT) 'salvo  file .rou.xml e lo chiudo 
+        objWriter.Close()
+
+    End Sub
 End Module

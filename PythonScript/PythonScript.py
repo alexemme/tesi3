@@ -15,9 +15,33 @@ except ImportError:
 
 
 # the port used for communicating with your sumo instance
-PORT = 8873
+PORT = 8874
 
 
 #MAIN
-print("File caricati correttamente")
-raw_input("Press enter to continue")
+arg= sys.argv[1] #prendo il primo argomento passato 
+if arg == 'gui' :
+    sumoBinary = checkBinary('sumo-gui')
+else:
+    sumoBinary = checkBinary('sumo')
+
+nomefile = sys.argv[2]
+
+def run():
+    #"""execute the TraCI control loop"""
+    traci.init(PORT)
+    step = 0
+    while traci.simulation.getMinExpectedNumber() > 0:
+        traci.simulationStep()
+        #        traci.trafficlights.setRedYellowGreenState("0", PROGRAM[programPointer])
+        step += 1
+    traci.close()
+    sys.stdout.flush()
+
+
+
+sumoProcess = subprocess.Popen([sumoBinary, "-c", nomefile, "--tripinfo-output", "tripinfo.xml", "--remote-port", str(PORT)], stdout=sys.stdout, stderr=sys.stderr)
+#print('Args: ' + nomefile)
+#raw_input("Press enter to continue")
+run()
+sumoProcess.wait()

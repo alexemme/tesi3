@@ -185,16 +185,24 @@ Public Class Form1
 
             'da qui in poi genero il routefile con le informazioni su ogni automobile che passa sull'incrocio nell'arco di tempo considerato
             'creo il nuovo file per la generazione di tutti i percorsi di tutte le automobili della simulazione 
-            Dim filepath As String = Path.GetDirectoryName(txtPerc1.Text)
-            Dim filename As String = Path.GetFileNameWithoutExtension(txtPerc1.Text)
-            Dim nuovofile As String = filepath & "/" & filename & ".rou.xml"
+            Dim filepath As String = Path.GetDirectoryName(txtPercSave.Text)
+            Dim filename As String = Path.GetFileNameWithoutExtension(txtPercSave.Text)
+
+            Dim pospto As Short = Strings.InStr(filename, ".") ' rimuovo la seconda parte di estensione se e' presente 
+            If pospto > 0 Then
+                filename = filename.Remove(pospto - 1)
+            End If
+
+            Dim nuovofile As String = filepath & "\" & filename & ".rou.xml"
             If Not System.IO.File.Exists(nuovofile) Then
                 System.IO.File.Create(nuovofile).Dispose()
+            Else
+                IO.File.Delete(nuovofile)
             End If
             Dim objWriter As New System.IO.StreamWriter(nuovofile, True)
             Dim stringOUTPUT As String = "<routes>" & vbCrLf
             'definisco come sono fatte le auto QUI
-            stringOUTPUT &= "<vType id=""Auto1"" accel=""0.8"" decel=""4.5"" sigma=""0.5"" length=""5"" minGap=""2.5"" maxSpeed=""16.67"" guiShape=""passenger""/>" & vbCrLf & vbCrLf
+            stringOUTPUT &= "<vType id=""auto1"" accel=""0.8"" decel=""4.5"" sigma=""0.5"" length=""5"" minGap=""2.5"" maxSpeed=""16.67"" guiShape=""passenger""/>" & vbCrLf & vbCrLf
             'definisco tutte le possibili svolte QUI 
             ' queste sono tutte le possibili combinazioni I-O , sono le stesse informazioni che avrei sul file net.xml
             'di sumo , semplicemente le riporto qui nel giusto formato . Sono tutte le connection con state "o"
@@ -206,22 +214,23 @@ Public Class Form1
                 Dim stateAttr = m_node.Attributes.GetNamedItem("state").Value
                 If stateAttr = "o" Then ' devo includerlo nel file ROU.XML
                     stringOUTPUT &= "<route id=""route" & rouNUM & """ edges=""" & fromAttr & " " & toAttr & """ />" & vbCrLf & vbCrLf
+                    rouNUM += 1
                 End If
-                rouNUM += 1
             Next
             'definisco OGNI POSSIBILE autoveicolo che attraversa la junction secondo una distribuzione definita 
             Dim numCICLI As Short = 3600 'TEST , devo sceglierlo a runtime
             'per ogni direzione ho diverse probabilita' 
-            Dim probGlobale As Double = 1 / 20 ' ipotizzo per ora la stessa probabilita' su ogni OD TEST
+            Dim probGlobale As Double = 1 / 30 ' ipotizzo per ora la stessa probabilita' su ogni OD TEST
             Dim rand As New Random() ' qui andrebbe specificato il SEED se occorre
             Randomize()
             Dim veicNUM As Short = 0
             For i = 1 To numCICLI
-                For j = 0 To rouNUM
+                For j = 0 To rouNUM - 1
                     If rand.NextDouble < probGlobale Then ' allora devo inserire la car nel circuito
                         '<vehicle id="left_0" type="typeWE" route="left" depart="0" />
-                        stringOUTPUT &= "<vehicle id=""veic_" & veicNUM & " type=""auto1"" route=""route" & j & _
+                        stringOUTPUT &= "<vehicle id=""veic_" & veicNUM & """ type=""auto1"" route=""route" & j & _
                             """ depart=""" & i & """ />" & vbCrLf
+                        veicNUM += 1
                     End If
                 Next
             Next
@@ -234,7 +243,23 @@ Public Class Form1
             m_xmld.Save(txtPercSave.Text) 'salvo il file .net.xml in una nuova posizione
             txtDebug.Text &= "File output salvato!" & vbCrLf
 
+            'creo il file di configurazione di sumo
+            creaFileCfg(filename)
+
+
             'arrivato qui devo inizializzare sumo attraverso python , in quanto le librerie traci non sono compatibili con .net
+            Dim filenamePY As String = Path.Combine(Directory.GetParent(System.IO.Directory.GetCurrentDirectory()).Parent.Parent.Parent.FullName)
+            filenamePY = filenamePY & "\VBproc\PythonScript\PythonScript.py"
+            Dim scriptPY As New ProcessStartInfo
+            'devo passare il sumocfg con percorso completo
+            Dim percfg As String = "gui " & """" & filepath & "\" & filename & ".sumocfg"""
+            scriptPY.Arguments = percfg
+            scriptPY.FileName = filenamePY
+            Process.Start(scriptPY)
+
+            'todo , devo poter scegliere la destinazione del file output xml di sumo della fine simulazione.
+
+
         Catch errorVariable As Exception
             txtDebug.Text &= "Errore XML: " & (errorVariable.ToString()) & vbCrLf
         End Try
@@ -258,10 +283,20 @@ Public Class Form1
 
 
         'provo a richiamare python
+        Dim filepath As String = Path.GetDirectoryName(txtPercSave.Text)
+        Dim filename As String = Path.GetFileNameWithoutExtension(txtPercSave.Text)
+        Dim pospto As Short = Strings.InStr(filename, ".") ' rimuovo la seconda parte di estensione se e' presente 
+        If pospto > 0 Then
+            filename = filename.Remove(pospto - 1)
+        End If
+        Dim percfg As String = "gui " & """" & filepath & "\" & filename & ".sumocfg"""
         Dim filenamePY As String = Path.Combine(Directory.GetParent(System.IO.Directory.GetCurrentDirectory()).Parent.Parent.Parent.FullName)
         filenamePY = filenamePY & "\VBproc\PythonScript\PythonScript.py"
-        Dim scriptPY As New System.Diagnostics.Process
-        scriptPY = System.Diagnostics.Process.Start(filenamePY)
+        Dim scriptPY As New ProcessStartInfo
+        scriptPY.Arguments = percfg
+        scriptPY.FileName = """" & filenamePY & """"
+        Process.Start(scriptPY)
+
 
     End Sub
 End Class
