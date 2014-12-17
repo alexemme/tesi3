@@ -7,6 +7,11 @@ End Structure
 Module moduloFunzioni
     Public puntiJunction(,) As String ' qui salvo i punti della junction man mano che li trovo
     Public versi() As Boolean
+    Public numTxtArrivi As Short = 0
+    Public txtArriviArray(10) As TextBox ' gestisco fino a 10 linee ?
+    Dim lblArriviArray(10) As Label
+    Public listaIncLanesJunction(10) As String
+    Public corrispondenzaLanes(100) As Short ' qui ho la corrispondenza numConnection<->numLinea
 
     'Public Function ordinaPuntiMIN(ByVal puntoJunction As Punto, ByRef puntoA As Punto, ByRef puntoB As Punto) As Boolean
     '    ' questa funzione mi ordina i due punti in modo che puntoA sia sempre quello a distanza minore da puntoJunct
@@ -134,4 +139,66 @@ Module moduloFunzioni
         objWriter.Close()
 
     End Sub
+
+
+    Public Sub generaBoxArrivi(idLane As String)
+        'creo il textbox e lo incollo nell'altra tab degli arrivi
+        txtArriviArray(numTxtArrivi) = New TextBox
+        txtArriviArray(numTxtArrivi).Name = "txtArrivi" & numTxtArrivi
+        txtArriviArray(numTxtArrivi).Size = New Size(50, 20)
+        txtArriviArray(numTxtArrivi).Location = New Point(200, 35 + 26 * numTxtArrivi)
+        txtArriviArray(numTxtArrivi).Text = "100" 'arrivi/ora , valore di base da modificare
+        Form1.TabPage2.Controls.Add(txtArriviArray(numTxtArrivi))
+
+        lblArriviArray(numTxtArrivi) = New Label
+        lblArriviArray(numTxtArrivi).Name = "lblArrivi" & numTxtArrivi
+        lblArriviArray(numTxtArrivi).AutoSize = True
+        lblArriviArray(numTxtArrivi).Location = New Point(8, 38 + 26 * numTxtArrivi)
+        lblArriviArray(numTxtArrivi).Text = "Linea " & idLane
+        Form1.TabPage2.Controls.Add(lblArriviArray(numTxtArrivi))
+        numTxtArrivi += 1
+    End Sub
+
+    Public Sub TrovaCorrispondenzaLineaPercorso(id As String, numid As Short)
+        For i = 0 To listaIncLanesJunction.Length - 1
+            If id & "_0" = listaIncLanesJunction(i) Then
+                'corrispondenza trovata
+                corrispondenzaLanes(numid) = i
+                Exit Sub
+            End If
+        Next
+    End Sub
+
+    Public Function Factorial(ByVal Factor As Byte) As Object
+        '******************************************************
+        'PURPOSE:
+        'SOLVE FACTORIALS: N!, or N*(N-1)*(N-2)*...*2*1
+        'Parameter: N
+        'Returns: Factorial
+
+        'EXAMPLE: 
+        'MsgBox Factorial(6) 
+        'Will display 720 because 6 * 5 * 4 * 3 * 2 * 1 = 720
+
+        'NOTE: Overflow will occur with any parameter over 170
+        '******************************************************
+
+        On Error GoTo ErrorHandler
+
+        If Factor = 0 Then
+            Factorial = 1
+        Else
+            Factorial = Factor * Factorial(Factor - 1)
+        End If
+        Exit Function
+
+ErrorHandler:
+        If Err.Number = 6 Then 'oveflow
+            Err.Raise(Err.Number, , _
+           "Overflow: Number passed to function was too large")
+
+        Else 'unknown reason for error, shouldn't occur
+            Err.Raise(Err.Number, , Err.Description)
+        End If
+    End Function
 End Module

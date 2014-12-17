@@ -20,10 +20,10 @@ Public Class Form1
         txtPerc1.Text = OpenFileDialog1.FileName
         SalvaSetts()
     End Sub
-    Private Sub btnOpenDialog_Click(sender As Object, e As EventArgs) Handles btnOpenDialog.Click
+    Private Sub btnOpenDialog_Click(sender As Object, e As EventArgs)
         OpenFileDialog1.ShowDialog()
     End Sub
-    Private Sub btnPercSave_Click(sender As Object, e As EventArgs) Handles btnPercSave.Click
+    Private Sub btnPercSave_Click(sender As Object, e As EventArgs)
         OpenFileDialog2.ShowDialog()
     End Sub
     Private Sub OpenFileDialog2_FileOk(sender As Object, e As System.ComponentModel.CancelEventArgs) Handles OpenFileDialog2.FileOk
@@ -59,6 +59,14 @@ Public Class Form1
                         'elimino i junction che non mi servono
 
 
+
+                        'aggiungo i textbox per la selezione degli arrivi nella tab2 
+                        ReDim listaIncLanesJunction(links.Length - 1)
+                        For i = 0 To links.Length - 1
+                            generaBoxArrivi(links(i)) ' messi nello stesso ordine del file originale
+                            listaIncLanesJunction(i) = links(i) 'salvo l'ordine delle lanes per trovare una corrispondenza 
+                            'quando vado a generare gli arrivi all'intersezione
+                        Next
 
                         'devo considerare tutte le direzioni dei links inclusi
                         Dim buff() As String = links
@@ -180,84 +188,10 @@ Public Class Form1
                     End If
                 End If
             Next
-            'TODO , gestione delle svolte al semaforo , per ora sorvolo e lascio a SUMO il compito di regolarle
 
 
-            'da qui in poi genero il routefile con le informazioni su ogni automobile che passa sull'incrocio nell'arco di tempo considerato
-            'creo il nuovo file per la generazione di tutti i percorsi di tutte le automobili della simulazione 
-            Dim filepath As String = Path.GetDirectoryName(txtPercSave.Text)
-            Dim filename As String = Path.GetFileNameWithoutExtension(txtPercSave.Text)
-
-            Dim pospto As Short = Strings.InStr(filename, ".") ' rimuovo la seconda parte di estensione se e' presente 
-            If pospto > 0 Then
-                filename = filename.Remove(pospto - 1)
-            End If
-
-            Dim nuovofile As String = filepath & "\" & filename & ".rou.xml"
-            If Not System.IO.File.Exists(nuovofile) Then
-                System.IO.File.Create(nuovofile).Dispose()
-            Else
-                IO.File.Delete(nuovofile)
-            End If
-            Dim objWriter As New System.IO.StreamWriter(nuovofile, True)
-            Dim stringOUTPUT As String = "<routes>" & vbCrLf
-            'definisco come sono fatte le auto QUI
-            stringOUTPUT &= "<vType id=""auto1"" accel=""0.8"" decel=""4.5"" sigma=""0.5"" length=""5"" minGap=""2.5"" maxSpeed=""16.67"" guiShape=""passenger""/>" & vbCrLf & vbCrLf
-            'definisco tutte le possibili svolte QUI 
-            ' queste sono tutte le possibili combinazioni I-O , sono le stesse informazioni che avrei sul file net.xml
-            'di sumo , semplicemente le riporto qui nel giusto formato . Sono tutte le connection con state "o"
-            m_nodelist = m_xmld.SelectNodes("net/connection")
-            Dim rouNUM As Short = 0
-            For Each m_node In m_nodelist
-                Dim fromAttr = m_node.Attributes.GetNamedItem("from").Value
-                Dim toAttr = m_node.Attributes.GetNamedItem("to").Value
-                Dim stateAttr = m_node.Attributes.GetNamedItem("state").Value
-                If stateAttr = "o" Then ' devo includerlo nel file ROU.XML
-                    stringOUTPUT &= "<route id=""route" & rouNUM & """ edges=""" & fromAttr & " " & toAttr & """ />" & vbCrLf & vbCrLf
-                    rouNUM += 1
-                End If
-            Next
-            'definisco OGNI POSSIBILE autoveicolo che attraversa la junction secondo una distribuzione definita 
-            Dim numCICLI As Short = 3600 'TEST , devo sceglierlo a runtime
-            'per ogni direzione ho diverse probabilita' 
-            Dim probGlobale As Double = 1 / 30 ' ipotizzo per ora la stessa probabilita' su ogni OD TEST
-            Dim rand As New Random() ' qui andrebbe specificato il SEED se occorre
-            Randomize()
-            Dim veicNUM As Short = 0
-            For i = 1 To numCICLI
-                For j = 0 To rouNUM - 1
-                    If rand.NextDouble < probGlobale Then ' allora devo inserire la car nel circuito
-                        '<vehicle id="left_0" type="typeWE" route="left" depart="0" />
-                        stringOUTPUT &= "<vehicle id=""veic_" & veicNUM & """ type=""auto1"" route=""route" & j & _
-                            """ depart=""" & i & """ />" & vbCrLf
-                        veicNUM += 1
-                    End If
-                Next
-            Next
-            stringOUTPUT &= "</routes>"
-            'ho concluso la costruzione del file 
-
-
-            objWriter.WriteLine(stringOUTPUT) 'salvo  file .rou.xml e lo chiudo 
-            objWriter.Close()
             m_xmld.Save(txtPercSave.Text) 'salvo il file .net.xml in una nuova posizione
-            txtDebug.Text &= "File output salvato!" & vbCrLf
 
-            'creo il file di configurazione di sumo
-            creaFileCfg(filename)
-
-
-            'arrivato qui devo inizializzare sumo attraverso python , in quanto le librerie traci non sono compatibili con .net
-            Dim filenamePY As String = Path.Combine(Directory.GetParent(System.IO.Directory.GetCurrentDirectory()).Parent.Parent.Parent.FullName)
-            filenamePY = filenamePY & "\VBproc\PythonScript\PythonScript.py"
-            Dim scriptPY As New ProcessStartInfo
-            'devo passare il sumocfg con percorso completo
-            Dim percfg As String = "gui " & """" & filepath & "\" & filename & ".sumocfg"""
-            scriptPY.Arguments = percfg
-            scriptPY.FileName = filenamePY
-            Process.Start(scriptPY)
-
-            'todo , devo poter scegliere la destinazione del file output xml di sumo della fine simulazione.
 
 
         Catch errorVariable As Exception
@@ -265,7 +199,7 @@ Public Class Form1
         End Try
     End Sub
 
-    Private Sub btnTest_Click(sender As Object, e As EventArgs) Handles btnTest.Click
+    Private Sub btnTest_Click(sender As Object, e As EventArgs)
 
         ' Dim dist = Math.Sqrt((350 - 467) ^ 2 + (456 - 760) ^ 2)
         ' Dim punto As Point = calcLastPoint(New Point(467, 760), New Point(350, 456), 70)
@@ -298,5 +232,196 @@ Public Class Form1
         Process.Start(scriptPY)
 
 
+    End Sub
+
+    Private Sub btnTest_Click_1(sender As Object, e As EventArgs) Handles btnTest.Click
+    End Sub
+
+  
+    Private Sub btnStartSim_Click(sender As Object, e As EventArgs) Handles btnStartSim.Click
+
+        Dim m_xmld As XmlDocument
+        Dim m_nodelist As XmlNodeList
+        'Create il documento (vuoto)
+        m_xmld = New XmlDocument()
+        'Carico il file XML della rete
+        m_xmld.Load(txtPerc1.Text) ' carico il percorso della textbox
+        'da qui in poi genero il routefile con le informazioni su ogni automobile che passa sull'incrocio nell'arco di tempo considerato
+        'creo il nuovo file per la generazione di tutti i percorsi di tutte le automobili della simulazione 
+        Dim filepath As String = Path.GetDirectoryName(txtPercSave.Text)
+        Dim filename As String = Path.GetFileNameWithoutExtension(txtPercSave.Text)
+
+        Dim pospto As Short = Strings.InStr(filename, ".") ' rimuovo la seconda parte di estensione se e' presente 
+        If pospto > 0 Then
+            filename = filename.Remove(pospto - 1)
+        End If
+
+        Dim nuovofile As String = filepath & "\" & filename & ".rou.xml"
+        If Not System.IO.File.Exists(nuovofile) Then
+            System.IO.File.Create(nuovofile).Dispose()
+        Else
+            IO.File.Delete(nuovofile)
+        End If
+        Dim objWriter As New System.IO.StreamWriter(nuovofile, True)
+        Dim stringOUTPUT As String = "<routes>" & vbCrLf
+        'definisco come sono fatte le auto QUI
+        stringOUTPUT &= "<vType id=""auto1"" accel=""0.8"" decel=""4.5"" sigma=""0.5"" length=""5"" minGap=""0.5"" maxSpeed=""30"" guiShape=""passenger""/>" & vbCrLf & vbCrLf
+        'mancano i mezzi pesanti.
+        'definisco tutte le possibili svolte QUI 
+
+        ' queste sono tutte le possibili combinazioni I-O , sono le stesse informazioni che avrei sul file net.xml
+        'di sumo , semplicemente le riporto qui nel giusto formato . Sono tutte le connection con state "o"
+        m_nodelist = m_xmld.SelectNodes("net/connection")
+        Dim rouNUM As Short = 0
+        For Each m_node In m_nodelist
+            Dim fromAttr = m_node.Attributes.GetNamedItem("from").Value
+            Dim toAttr = m_node.Attributes.GetNamedItem("to").Value
+            Dim stateAttr = m_node.Attributes.GetNamedItem("state").Value
+            If stateAttr = "o" Then ' devo includerlo nel file ROU.XML
+                stringOUTPUT &= "<route id=""route" & rouNUM & """ edges=""" & fromAttr & " " & toAttr & """ />" & vbCrLf & vbCrLf
+                'devo trovare qui la corrispondenza con la linea della junction
+                TrovaCorrispondenzaLineaPercorso(fromAttr, rouNUM) 'trova corrispondenza con l' ID della linea della junction
+                rouNUM += 1
+            End If
+        Next
+
+        'definisco OGNI POSSIBILE autoveicolo che attraversa la junction secondo una distribuzione definita 
+        Dim numCICLI As Short = 3600 'TEST , devo sceglierlo a runtime
+
+
+        'ho degli arrivi con distribuzione di POISSON di parametro Q = numero di arrivi/h ,
+        'questa ipotesi cade se all'arrivo di una linea mi ritrovo un altro semaforo , in quel caso gli arrivi non sono
+        'completamente casuali e non hanno distribuzione poissoniana
+        'devo  capire con quale probabilita' un veicolo svoltera' in una direzione piuttosto che un'altra 
+
+
+        Dim probGlobale As Double = 1 / 30 ' ipotizzo per ora la stessa probabilita' su ogni OD TEST
+        Dim rand As New Random() ' qui andrebbe specificato il SEED se occorre
+        Randomize()
+        Dim veicNUM As Short = 0
+
+
+        'per capire quanti veicoli arrivano in quell'intervallo temporale devo creare degli intervalli di probabilita' 
+        'con approssimazione 
+
+        For i = 1 To numCICLI
+            'devo calcolare iterativamente la probabilita' degli arrivi
+
+            Dim arraySvolte(listaIncLanesJunction.Length - 1, rouNUM - 1) As Short 'matrice delle coincidenze linea arrivo-svolta
+            For j = 0 To rouNUM - 1
+                'rouNum sono il numero di connessioni specificato sul file net.xml , 
+                'devo trovare una corrispondenza con le Lanes della junction principale 
+                arraySvolte(corrispondenzaLanes(j), j) = 1
+            Next
+            For j = 0 To listaIncLanesJunction.Length - 1 ' per ogni linea di accesso dell'intersezione
+                'calcolo la probabilita' della svolta su una delle possibili direzioni possibili
+                'TEST , ipotizzo per ora equiprobabilita' su tutte le possibili svolte ###########
+                Dim numSvolte As Short = 0
+                For k = 0 To rouNUM - 1
+                    If arraySvolte(j, k) = 1 Then
+                        numSvolte += 1
+                    End If
+                Next
+                'la probabilita' di svolta su una direzione e' 1/numDirezioni
+                '############################
+
+
+                Dim probCumulata As Double = 0
+                Dim valoreRandom As Double = rand.NextDouble 'casuale da 0 a 1
+                Dim overflowProtectContatore As Short = 0
+                Dim numArrivi As Short = 0
+                Dim n As Short = 0 ' contatore arrivi
+                'probabilita' degli arrivi
+                Dim q As Double ' inserisco il valore di q e creo la prob cumulata della distribuzione 
+                q = txtArriviArray(j).Text 'arrivi medi all'ora
+                probCumulata = (Math.Exp(-q / 3600) * (q / 3600) ^ n) / Factorial(n)
+                While Not valoreRandom <= probCumulata
+                    n += 1
+                    If overflowProtectContatore > 100 Then
+                        Exit While ' se prendo percentuali improbabili tipo 99.9999% , devo uscire prima di andare in overflow
+                    End If
+                    overflowProtectContatore += 1
+                    probCumulata += (Math.Exp(-q / 3600) * (q / 3600) ^ n) / Factorial(n) ' distribuzione poissoniana arrivi
+                End While
+
+
+                'inserisco nel file della simulazione i dati della vettura in arrivo e calcolo dove andra' a svoltare
+                'calcolo su quale linea andra' a svoltare
+                'questo per ogni vettura in arrivo , anche se scrivo sul file che arrivano piu' auto nello stesso momento ,
+                ' e' il software  che ne gestisce l'arrivo effettivo
+
+                For y = 0 To n - 1 ' per ogni veicolo in arrivo
+                    valoreRandom = rand.NextDouble
+                    probCumulata = 1 / numSvolte
+                    Dim s As Short = 1 ' e' l'indice della svolta che prendera' la macchina
+                    While Not valoreRandom <= probCumulata
+                        s += 1
+                        probCumulata += 1 / numSvolte
+                    End While
+
+                    'devo ritrovare la corrispondenza dell ' indice della svolta con l'id della "connection" del file net.xml
+                    Dim conta As Short = 0
+                    For t = 0 To rouNUM - 1
+                        If arraySvolte(j, t) = 1 Then
+                            conta += 1
+                            If conta = s Then
+                                ' quando trovo la corrispondenza aggiungo i dati sul trip nell'apposito file
+                                stringOUTPUT &= "<vehicle id=""veic_" & veicNUM & """ type=""auto1"" route=""route" & t & _
+                                                        """ depart=""" & i & """ />" & vbCrLf
+                                veicNUM += 1
+
+                            End If
+                        End If
+                    Next
+                Next
+
+            Next
+
+
+
+
+
+            'old
+            For j = 0 To rouNUM - 1
+                If rand.NextDouble < probGlobale Then ' allora devo inserire la car nel circuito
+                    '<vehicle id="left_0" type="typeWE" route="left" depart="0" />
+                    
+                End If
+            Next
+        Next
+        stringOUTPUT &= "</routes>"
+        'ho concluso la costruzione del file 
+
+
+        objWriter.WriteLine(stringOUTPUT) 'salvo  file .rou.xml e lo chiudo 
+        objWriter.Close()
+
+        txtDebug.Text &= "File output salvato!" & vbCrLf
+
+        'creo il file di configurazione di sumo
+        creaFileCfg(filename)
+
+
+        'arrivato qui devo inizializzare sumo attraverso python , in quanto le librerie traci non sono compatibili con .net
+        Dim filenamePY As String = Path.Combine(Directory.GetParent(System.IO.Directory.GetCurrentDirectory()).Parent.Parent.Parent.FullName)
+        filenamePY = filenamePY & "\VBproc\PythonScript\PythonScript.py"
+        Dim scriptPY As New ProcessStartInfo
+        'devo passare il sumocfg con percorso completo
+        Dim percfg As String = "gui " & """" & filepath & "\" & filename & ".sumocfg"""
+        scriptPY.Arguments = percfg
+        scriptPY.FileName = filenamePY
+        Process.Start(scriptPY)
+        'todo , devo poter scegliere la destinazione del file output xml di sumo della fine simulazione.
+    End Sub
+
+
+    Private Sub Button1_Click(sender As Object, e As EventArgs) Handles Button1.Click
+        Dim percorsoSumo As String = Environment.GetEnvironmentVariable("SUMO_HOME") & "/bin/sumo-gui.exe"
+        Dim sumoguiProc As New ProcessStartInfo
+        'devo passare il sumocfg con percorso completo
+        Dim cfg As String = "-n " & """" & txtPercSave.Text & """"
+        sumoguiProc.Arguments = cfg
+        sumoguiProc.FileName = percorsoSumo
+        Process.Start(sumoguiProc)
     End Sub
 End Class
