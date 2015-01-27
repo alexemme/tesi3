@@ -8,10 +8,24 @@ Module moduloFunzioni
     Public puntiJunction(,) As String ' qui salvo i punti della junction man mano che li trovo
     Public versi() As Boolean
     Public numTxtArrivi As Short = 0
+    Public numtxtDest As Short = 0
     Public txtArriviArray(10) As TextBox ' gestisco fino a 10 linee ?
     Dim lblArriviArray(10) As Label
+    Public txtDestinazArray(10) As TextBox ' gestisco fino a 10 linee ?
+    Dim lblDestinazArray(100) As Label
+
+    Public lblConn(100) As Label
+    Public lblConnColor(100) As Label
+    Public numLabelConn As Short = 0
+
+
+    Dim numLineaTextbox As Short ' tiene conto delle righe di textbox che ho gia disegnato sulla scheda , per calcolare la coordinata y
     Public listaIncLanesJunction(10) As String
     Public corrispondenzaLanes(100) As Short ' qui ho la corrispondenza numConnection<->numLinea
+    Public corrispondenzaDest(100) As String ' qui salvo l'id della linea di destinazione per ogni connection del net.xml
+    Public FLAG_FILE_LOADED As Boolean = False
+
+
 
     'Public Function ordinaPuntiMIN(ByVal puntoJunction As Punto, ByRef puntoA As Punto, ByRef puntoB As Punto) As Boolean
     '    ' questa funzione mi ordina i due punti in modo che puntoA sia sempre quello a distanza minore da puntoJunct
@@ -79,7 +93,6 @@ Module moduloFunzioni
 
         End If
         PX.Y = m * PX.X + q
-
         'ora calcolo i punti della junction 
         diff = 1.6
         m = -1 / m
@@ -140,31 +153,94 @@ Module moduloFunzioni
 
     End Sub
 
+    Public Sub generaLabelFasi(testo As String)
+        lblConn(numLabelConn) = New Label
+        lblConn(numLabelConn).Name = "lblConn_" & numLabelConn
+        lblConn(numLabelConn).AutoSize = True
+        lblConn(numLabelConn).Location = New Point(229, 31 + numLabelConn * 20)
+        lblConn(numLabelConn).Text = testo
+        lblConn(numLabelConn).Tag = testo
+        ' lblConn(numLabelConn).Size = New Size(150, 20)
+        lblConn(numLabelConn).TextAlign = ContentAlignment.TopCenter
+        AddHandler lblConn(numLabelConn).Click, AddressOf lblconn_click
+        Form1.Panel2.Controls.Add(lblConn(numLabelConn))
+        lblConnColor(numLabelConn) = New Label
+        lblConnColor(numLabelConn).Tag = testo
+        lblConnColor(numLabelConn).Name = "lblConnCol_" & numLabelConn
+        lblConnColor(numLabelConn).Size = New Size(50, 18)
+        lblConnColor(numLabelConn).TextAlign = ContentAlignment.TopCenter
+        lblConnColor(numLabelConn).Location = New Point(391, 31 + numLabelConn * 20)
+        Form1.Panel2.Controls.Add(lblConnColor(numLabelConn))
+        numLabelConn += 1
+    End Sub
+
+    Private Sub lblconn_click(sender As Object, e As System.EventArgs)
+        Dim lb As Label = CType(sender, Label) ' effettuo la conversione da sender a label!
+        'devo recuperare il TAG per sapere quale connessione vado a modificare
+        For i = 0 To numLabelConn - 1
+            If lblConn(i).Text <> lb.Text Then
+                lblConn(i).BackColor = Color.Transparent
+            Else
+                Form1.connSelez = i
+                lb.BackColor = Color.Gray
+                Form1.selezionaConn(i)
+            End If
+        Next
+    End Sub
 
     Public Sub generaBoxArrivi(idLane As String)
         'creo il textbox e lo incollo nell'altra tab degli arrivi
         txtArriviArray(numTxtArrivi) = New TextBox
-        txtArriviArray(numTxtArrivi).Name = "txtArrivi" & numTxtArrivi
+        txtArriviArray(numTxtArrivi).Name = "txtArrivi_" & numTxtArrivi
         txtArriviArray(numTxtArrivi).Size = New Size(50, 20)
-        txtArriviArray(numTxtArrivi).Location = New Point(200, 35 + 26 * numTxtArrivi)
+        txtArriviArray(numTxtArrivi).Location = New Point(200, 55 + 26 * numLineaTextbox)
         txtArriviArray(numTxtArrivi).Text = "100" 'arrivi/ora , valore di base da modificare
         Form1.TabPage2.Controls.Add(txtArriviArray(numTxtArrivi))
 
         lblArriviArray(numTxtArrivi) = New Label
         lblArriviArray(numTxtArrivi).Name = "lblArrivi" & numTxtArrivi
         lblArriviArray(numTxtArrivi).AutoSize = True
-        lblArriviArray(numTxtArrivi).Location = New Point(8, 38 + 26 * numTxtArrivi)
+        lblArriviArray(numTxtArrivi).Location = New Point(8, 58 + 26 * numLineaTextbox)
         lblArriviArray(numTxtArrivi).Text = "Linea " & idLane
         Form1.TabPage2.Controls.Add(lblArriviArray(numTxtArrivi))
         numTxtArrivi += 1
+        numLineaTextbox += 1
     End Sub
 
-    Public Sub TrovaCorrispondenzaLineaPercorso(id As String, numid As Short)
+    Public Sub generaBoxDestinazioni(numLAne As Short, numDest As Short, idDest As String, probIniz As Double)
+        txtDestinazArray(numtxtDest) = New TextBox
+        txtDestinazArray(numtxtDest).Name = "txtDestinazioni_" & numLAne & "_" & numDest
+        txtDestinazArray(numtxtDest).Size = New Size(50, 20)
+        txtDestinazArray(numtxtDest).Location = New Point(250, 55 + 26 * numLineaTextbox)
+        txtDestinazArray(numtxtDest).Text = probIniz
+        Form1.TabPage2.Controls.Add(txtDestinazArray(numtxtDest))
+
+        lblArriviArray(numtxtDest) = New Label
+        lblArriviArray(numtxtDest).Name = "lblDestinazioni" & numLAne & numDest & "1"
+        lblArriviArray(numtxtDest).AutoSize = True
+        lblArriviArray(numtxtDest).Location = New Point(38, 58 + 26 * numLineaTextbox)
+        'idDest potrebbe essere l'id della carreggiata opposta della strada dove mi devo immettere
+        lblArriviArray(numtxtDest).Text = "Probabilita' di svolta su linea " & idDest
+        Form1.TabPage2.Controls.Add(lblArriviArray(numtxtDest))
+
+        lblArriviArray(numtxtDest) = New Label
+        lblArriviArray(numtxtDest).Name = "lblDestinazioni" & numLAne & numDest & "1"
+        lblArriviArray(numtxtDest).AutoSize = True
+        lblArriviArray(numtxtDest).Location = New Point(300, 58 + 26 * numLineaTextbox)
+        'idDest potrebbe essere l'id della carreggiata opposta della strada dove mi devo immettere
+        lblArriviArray(numtxtDest).Text = "%"
+        Form1.TabPage2.Controls.Add(lblArriviArray(numtxtDest))
+
+        numtxtDest += 1
+        numLineaTextbox += 1
+    End Sub
+
+    Public Sub TrovaCorrispondenzaLineaPercorso(idFrom As String, idTo As String, numid As Short, fromlane As Short, tolane As Short)
+        corrispondenzaDest(numid) = idTo
         For i = 0 To listaIncLanesJunction.Length - 1
-            If id & "_0" = listaIncLanesJunction(i) Then
+            If idFrom = listaIncLanesJunction(i) Then
                 'corrispondenza trovata
                 corrispondenzaLanes(numid) = i
-                Exit Sub
             End If
         Next
     End Sub
@@ -201,4 +277,8 @@ ErrorHandler:
             Err.Raise(Err.Number, , Err.Description)
         End If
     End Function
+
+
+
+
 End Module
