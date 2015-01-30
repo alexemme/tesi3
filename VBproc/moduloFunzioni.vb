@@ -9,9 +9,9 @@ Module moduloFunzioni
     Public versi() As Boolean
     Public numTxtArrivi As Short = 0
     Public numtxtDest As Short = 0
-    Public txtArriviArray(10) As TextBox ' gestisco fino a 10 linee ?
-    Dim lblArriviArray(10) As Label
-    Public txtDestinazArray(10) As TextBox ' gestisco fino a 10 linee ?
+    Public txtArriviArray(100) As TextBox ' gestisco fino a 10 linee ?
+    Dim lblArriviArray(100) As Label
+    Public txtDestinazArray(100) As TextBox ' gestisco fino a 10 linee ?
     Dim lblDestinazArray(100) As Label
 
     Public lblConn(100) As Label
@@ -20,9 +20,10 @@ Module moduloFunzioni
 
 
     Dim numLineaTextbox As Short ' tiene conto delle righe di textbox che ho gia disegnato sulla scheda , per calcolare la coordinata y
-    Public listaIncLanesJunction(10) As String
-    Public corrispondenzaLanes(100) As Short ' qui ho la corrispondenza numConnection<->numLinea
-    Public corrispondenzaDest(100) As String ' qui salvo l'id della linea di destinazione per ogni connection del net.xml
+    Public listaORIG(100) As String
+    Public corrispondenzaOD(100) As Short ' qui ho la corrispondenza numConnection<->numLinea
+    Public listaDEST(100) As String ' qui salvo l'id della linea di destinazione per ogni connection del net.xml
+    Public corrispondenzaTLS(100) As Short ' corrispondenza tra linee che si affacciano al TLS e i segnali semaforici in tab4
     Public FLAG_FILE_LOADED As Boolean = False
 
 
@@ -157,7 +158,7 @@ Module moduloFunzioni
         lblConn(numLabelConn) = New Label
         lblConn(numLabelConn).Name = "lblConn_" & numLabelConn
         lblConn(numLabelConn).AutoSize = True
-        lblConn(numLabelConn).Location = New Point(229, 31 + numLabelConn * 20)
+        lblConn(numLabelConn).Location = New Point(199, 31 + numLabelConn * 20)
         lblConn(numLabelConn).Text = testo
         lblConn(numLabelConn).Tag = testo
         ' lblConn(numLabelConn).Size = New Size(150, 20)
@@ -236,11 +237,11 @@ Module moduloFunzioni
     End Sub
 
     Public Sub TrovaCorrispondenzaLineaPercorso(idFrom As String, idTo As String, numid As Short, fromlane As Short, tolane As Short)
-        corrispondenzaDest(numid) = idTo
-        For i = 0 To listaIncLanesJunction.Length - 1
-            If idFrom = listaIncLanesJunction(i) Then
+        listaDEST(numid) = idTo
+        For i = 0 To listaORIG.Length - 1
+            If idFrom = listaORIG(i) Then
                 'corrispondenza trovata
-                corrispondenzaLanes(numid) = i
+                corrispondenzaOD(numid) = i
             End If
         Next
     End Sub

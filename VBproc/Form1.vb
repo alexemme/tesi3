@@ -17,6 +17,7 @@ Public Class Form1
     Dim tab3Tag As String = "" ' qui segno dati che potrebbero essere utili per la gestione delle azioni 
     Dim tab2Action As Short = 0 ' indica se e' stato modificato qualche valore oppure no
     Dim tab2Tag As Short = 0 ' indico l'indice precedente del cmbVeic 
+    Dim linksORIG(100) As String 'lista delle linee che si affacciano al semaforo ( ordinate come nel .net.xml )
     'se action=1 segno l'id del nodo da modificare
 
     Public connSelez As Short = -1
@@ -67,6 +68,10 @@ Public Class Form1
     End Sub
     Private Sub OpenFileDialog1_FileOk(sender As Object, e As System.ComponentModel.CancelEventArgs) Handles OpenFileDialog1.FileOk
         txtPerc1.Text = OpenFileDialog1.FileName
+        Dim filepath As String = Path.GetDirectoryName(OpenFileDialog1.FileName)
+        Dim filename As String = Path.GetFileNameWithoutExtension(OpenFileDialog1.FileName)
+        Dim fname() As String = filename.Split(".")
+        txtPercSave.Text = filepath & "\" & fname(0) & "_OUT.net.xml"
         SalvaSetts()
     End Sub
     Private Sub btnOpenDialog_Click(sender As Object, e As EventArgs) Handles btnOpenDialog.Click
@@ -109,302 +114,430 @@ Public Class Form1
         m_nodelist = m_xmld.SelectNodes("net/junction")
         m_net = m_xmld.SelectSingleNode("net")
         'Controllo tutti i nodi letti
+
+        Dim Jx, Jy As Short ' coordinate della junction principale
+        Dim numInc As Short = 0 ' contatore delle incLanes della junction principale
         For Each m_node In m_nodelist
             'Get the Gender Attribute Value
             Dim includeLanes = m_node.Attributes.GetNamedItem("incLanes").Value
             Dim junctype = m_node.Attributes.GetNamedItem("type").Value
             If junctype = "priority" Or junctype = "traffic_light" Then  'se la junction non e' di tipo internal 
-                Dim links() As String = includeLanes.Split(" ")
-                If links.Count > 2 Then ' sto processando l'incrocio principale
-                    'se l'id della linea e' indicato con - allora la strada proviene dall'alto verso il basso o da 
-                    'destra verso sinistra
-                    'arrivato qui ho individuato l' incrocio di interesse
-                    'elimino i junction che non mi servono
-
-                    'recupero dati sulle possibili svolte
-                    Dim buffLincJ(links.Length - 1) As String
-                    Dim contaElem As Short = 0
-                    Dim connlist As XmlNodeList
-                    connlist = m_xmld.SelectNodes("net/connection")
-                    Dim rouNUM As Short = 0
-                    For i = 0 To links.Length - 1 'devo prendere solo le strade senza tener conto del numero di linea
-                        'di cui si occupera' automaticamente il simulator
-                        Dim flagF As Boolean = False
-                        Dim s() As String = links(i).Split("_")
-                        For t = 0 To links.Length - 1
-                            If buffLincJ(t) = s(0) Then
-                                flagF = True
-                                Exit For
-                            End If
-                        Next
-                        If flagF = False Then
-                            buffLincJ(contaElem) = s(0) 'salvo l'ordine delle lanes per trovare una corrispondenza
-                            contaElem += 1
-                        End If
-
-                    Next
-                    ReDim listaIncLanesJunction(contaElem - 1)
-                    For i = 0 To contaElem - 1
-                        listaIncLanesJunction(i) = buffLincJ(i)
-                    Next
-
-                    Dim buffListaConn(connlist.Count - 1) As String
-                    Dim numConn As Short
-                    For Each m_connNode In connlist
-                        Dim fromAttr = m_connNode.Attributes.GetNamedItem("from").Value
-                        Dim toAttr = m_connNode.Attributes.GetNamedItem("to").Value
-                        Dim stateAttr = m_connNode.Attributes.GetNamedItem("state").Value
-                        Dim fromLane As Short = m_connNode.Attributes.GetNamedItem("fromLane").Value
-                        Dim toLane As Short = m_connNode.Attributes.GetNamedItem("toLane").Value
-                        If stateAttr = "o" Then ' devo includerlo nel file ROU.XML , 
-                            'devo escludere le connessioni che rappresentano le stesse svolte su corsie diverse
-                            Dim flagF As Boolean = False
-                            For i = 0 To numConn - 1
-                                If buffListaConn(i) = fromAttr & toAttr Then
-                                    flagF = True
-                                    Exit For
-                                End If
-                            Next
-                            If flagF = False Then
-                                buffListaConn(numConn) = fromAttr & toAttr
-                                numConn += 1
-                                TrovaCorrispondenzaLineaPercorso(fromAttr, toAttr, rouNUM, fromLane, toLane) 'trova corrispondenza con l' ID della linea della junction
-                                'aggiungo le voci della tabella in TAB4
-                                lstFasi.Columns.Add(rouNUM.ToString, 25, HorizontalAlignment.Left)
-                                'aggiungo gli elementi label 
-                                generaLabelFasi(fromAttr & " -> " & toAttr)
-                                rouNUM += 1
-                            End If
-                        End If
-                    Next
-
-                    'salvo le origini destinazioni delle varie strade nel file di configurazione , nella tab infine riapro
-                    ' il file 
-                    'creo il file di impostazione con informazioni sui tipi di veicoli e sugli arrivi/destinazioni.
-                    'Sotto gestione dei veicoli riapro questo file invece di ricreare le impostazioni
-                    'saveXMLconfig(fileINI, "prova", 10.33453, 0.6)
-
-                    Dim fileINIexists As Boolean = False
-                    If Not System.IO.File.Exists(fileINI) Then
-                        System.IO.File.Create(fileINI).Dispose()
-                    Else
-                        fileINIexists = True
+                Dim includes() As String = includeLanes.Split(" ")
+                If includes.Count > 0 Then
+                    'devo processare tutti i junct regolati da un semaforo 
+                    'per ipotesi di partenza si tratta della stessa rete semaforica
+                    'devo trattare tutti gli includelanes come se fossero di un unico junction
+                    ' recupero successivamente informazioni sulla junction, per il momento mi occorrono 
+                    'solamente coordinate della junction principale al fine di poter ridimensionare correttamente
+                    'gli archi in arrivo
+                    If numInc < includes.Count Then
+                        numInc = includes.Count
+                        Jx = m_node.Attributes.GetNamedItem("x").Value.Replace(".", ",")
+                        Jy = m_node.Attributes.GetNamedItem("y").Value.Replace(".", ",")
                     End If
-                    'salvo il file come un XML per mantenere lo stile del progetto e avere maggiore flessibilita'
-                    Dim m_xmld2 As XmlDocument = New XmlDocument()
-                    'Dim prova1 As XmlNode = m_xmld.CreateXmlDeclaration("1.0", "UTF-8", "")
-                    'm_xmld.AppendChild(prova1)
-
-                    Dim cfgNode As XmlNode = m_xmld2.CreateElement("cfgVeic") ' creo nodo di configurazione principale
-                    m_xmld2.AppendChild(cfgNode)
-
-                    Dim VeicNode As XmlNode = m_xmld2.CreateElement("vType") ' per ogni tipo di veicolo 
-                    Dim veicAttribute1 As XmlAttribute = m_xmld2.CreateAttribute("id") ' scrivo gli attributi
-                    veicAttribute1.Value = "Standard_Auto"
-                    VeicNode.Attributes.Append(veicAttribute1)
-                    Dim veicAttribute As XmlAttribute = m_xmld2.CreateAttribute("accel") ' scrivo gli attributi
-                    veicAttribute.Value = "0.8"
-                    VeicNode.Attributes.Append(veicAttribute)
-                    veicAttribute = m_xmld2.CreateAttribute("decel") ' scrivo gli attributi
-                    veicAttribute.Value = "4,5"
-                    VeicNode.Attributes.Append(veicAttribute)
-                    veicAttribute = m_xmld2.CreateAttribute("sigma")
-                    veicAttribute.Value = "0.5"
-                    VeicNode.Attributes.Append(veicAttribute)
-                    veicAttribute = m_xmld2.CreateAttribute("length")
-                    veicAttribute.Value = "5"
-                    VeicNode.Attributes.Append(veicAttribute)
-                    veicAttribute = m_xmld2.CreateAttribute("minGap")
-                    veicAttribute.Value = "0.5"
-                    VeicNode.Attributes.Append(veicAttribute)
-                    veicAttribute = m_xmld2.CreateAttribute("maxSpeed")
-                    veicAttribute.Value = "30"
-                    VeicNode.Attributes.Append(veicAttribute)
-                    veicAttribute = m_xmld2.CreateAttribute("guiShape")
-                    veicAttribute.Value = "0"
-                    VeicNode.Attributes.Append(veicAttribute)
-
-
-
-                    Dim toIDELEM As XmlNode
-                    For i = 0 To listaIncLanesJunction.Length - 1
-                        generaBoxArrivi(listaIncLanesJunction(i))
-                        Dim ADinfo As XmlNode = m_xmld2.CreateElement("trafficInfo")
-                        Dim loadAttr As XmlAttribute = m_xmld2.CreateAttribute("trafficLoad")
-                        loadAttr.Value = "100"
-                        ADinfo.Attributes.Append(loadAttr)
-                        VeicNode.AppendChild(ADinfo)
-                        Dim fromID As XmlAttribute = m_xmld2.CreateAttribute("fromLane")
-                        fromID.Value = listaIncLanesJunction(i) ' setto l'origine , 
-
-                        ADinfo.Attributes.Append(fromID)
-                        Dim numDest As Short = 0 ' inizio a calcolare la equiprobabilita' di svolta
-                        Dim probDest As Double = 0
-                        For f = 0 To rouNUM - 1
-                            If corrispondenzaLanes(f) = i Then ' dovra' essere modificato il valore manualmente
-                                numDest += 1
-                            End If
-                        Next
-                        probDest = 1 / numDest
-                        For m = 0 To rouNUM - 1
-                            If corrispondenzaLanes(m) = i Then
-                                generaBoxDestinazioni(i, m, corrispondenzaDest(m), probDest.ToString("#.##"))
-                                toIDELEM = m_xmld2.CreateElement("toLane")
-                                Dim toid As XmlAttribute = m_xmld2.CreateAttribute("toID")
-                                toid.Value = corrispondenzaDest(m)
-                                toIDELEM.Attributes.Append(toid)
-                                toid = m_xmld2.CreateAttribute("prob")
-                                toid.Value = probDest.ToString("n3").Replace(",", ".")
-                                toIDELEM.Attributes.Append(toid)
-                                ADinfo.AppendChild(toIDELEM)
-                            End If
-                        Next
-                    Next
-
-                    ODstdNode = m_xmld2
-                    cfgNode.AppendChild(VeicNode)
-                    If fileINIexists = False Then
-                        m_xmld2.Save(fileINI)
-                    End If
-
-                    'devo creare solo i box dei dATI di traffico qui se il file gia' esiste
-
-                    'For i = 0 To links.Length - 1 ' VECCHIA  VERSIONE CHE CREAVA IL BOX PRIMA DEL FILE 
-                    '    generaBoxArrivi(links(i)) ' messi nello stesso ordine del file originale
-                    '    Dim numDest As Short = 0
-                    '    Dim probDest As Double = 0
-                    '    For f = 0 To rouNUM - 1 ' calcolo probabilita' di ogni svolta , Setto inizialmente equiprobabilità
-                    '        If corrispondenzaLanes(f) = i Then ' dovra' essere modificato il valore manualmente
-                    '            numDest += 1
-                    '        End If
-                    '    Next
-                    '    probDest = 1 / numDest
-                    '    For m = 0 To rouNUM - 1
-                    '        If corrispondenzaLanes(m) = i Then
-                    '            generaBoxDestinazioni(i, m, corrispondenzaDest(m) & "_0", probDest.ToString("#.##"))
-                    '        End If
-                    '    Next
-                    '    ' qui devo aggiungere informazioni riguardo le possibili svolte 
-                    '    'quando vado a generare gli arrivi all'intersezione
-                    'Next
-
-                    'devo considerare tutte le direzioni dei links inclusi
-                    'Dim buff() As String = links
-                    'ReDim links(links.Count * 2 - 1)
-                    ReDim puntiJunction(links.Count * 2 - 1, 1)  ' qui salvo i punti della junction man mano che li trovo
-                    ReDim versi(links.Count * 2 - 1) 'qui dentro mi segno i versi delle junction
-                    Dim j As Short = 0
-
-                    'For i = 0 To buff.Length - 1
-                    '    links(j) = buff(i).Replace("-", "")
-                    '    links(j + 1) = "-" & buff(i).Replace("-", "")
-                    '    j += 2
-                    'Next
-
-                    txtDebug.Text &= "Lunghezza Strade adiacenti l'incrocio di interesse: " & vbCrLf
-                    For i = 0 To links.Count - 1
-                        'calcolo la lunghezza della strada 
-
-                        m_node1 = m_net.SelectSingleNode("//lane[@id='" & links(i) & "']") 'seleziono il nodo che mi interessa
-                        Dim debtest As String = m_node1.Attributes.GetNamedItem("length").Value
-                        Dim lunghezza As Double = m_node1.Attributes.GetNamedItem("length").Value.Replace(".", ",")
-
-                        txtDebug.Text &= "ID:" & links(i).ToString & " , Lunghezza: " & lunghezza & vbCrLf
-                        'se la lunghezza non e' 50 metri devo tagliare / accorciare l'ultimo tratto 
-                        'per iniziare devo individuare il punto piu' vicino alla junction 
-                        Dim ptJunct As Punto
-                        ptJunct.X = m_node.Attributes.GetNamedItem("x").Value.Replace(".", ",")
-                        ptJunct.Y = m_node.Attributes.GetNamedItem("y").Value.Replace(".", ",")
-                        'a priori non so quale sia il punto iniziale e quello finale , devo verificarli
-                        Dim puntiSTR() As String = m_node1.Attributes.GetNamedItem("shape").Value.Split(" ")
-                        Dim punti(puntiSTR.Length - 1) As Punto
-                        'devo inserire tutti i nodi della strada in un unico array
-                        For j = 0 To puntiSTR.Length - 1
-                            Dim ptbuf() As String = puntiSTR(j).Split(",")
-                            punti(j).X = ptbuf(0).Replace(".", ",")
-                            punti(j).Y = ptbuf(1).Replace(".", ",")
-                        Next
-                        Dim pta, ptb As Punto
-                        pta.X = punti(0).X
-                        pta.Y = punti(0).Y
-                        ptb.X = punti(punti.Length - 1).X
-                        ptb.Y = punti(punti.Length - 1).Y
-                        Dim verso As Boolean = ordinaPuntiMIN(ptJunct, punti)
-                        ' con questa funzione  ordino i punti estremali della strada, ptA e' sempre il pt vicino all'incrocio
-                        ' inoltre mi restituisce il verso della successione di nodi rispetto l'incrocio T
-                        'True se il verso e' opposto 
-                        'devo individuare i nodi che non mi servono
-                        Dim distanza As Double
-                        Dim pi As Punto
-                        Dim pf As Punto
-                        Dim puntiSTRMod As String = "" ' la stringa finale modificata da reinserire nel file .net.xml
-                        Dim diff As Double
-                        distanza = 0
-                        puntiSTRMod &= punti(0).X.ToString("#.##").Replace(",", ".") & _
-                                    "," & punti(0).Y.ToString("#.##").Replace(",", ".") & " "
-                        For j = 0 To punti.Length - 2
-                            'calcolo iterativamente la distanza dal punto iniziale 
-                            pi.X = punti(j).X
-                            pi.Y = punti(j).Y
-                            pf.X = punti(j + 1).X
-                            pf.Y = punti(j + 1).Y
-
-                            distanza += Math.Sqrt((pi.X - pf.X) ^ 2 + (pi.Y - pf.Y) ^ 2)
-                            If distanza > lunghezzaTronchi Then
-                                'arrivato qui dentro ho trovato l'ultimo punto da modificare
-                                Dim punto As Punto = calcLastPoint(pi, pf, lunghezzaTronchi - distanza, verso, i)
-                                pf.X = punto.X
-                                pf.Y = punto.Y
-                                puntiSTRMod &= punto.X.ToString("#.##").Replace(",", ".") & _
-                                "," & punto.Y.ToString("#.##").Replace(",", ".") & " "
-                                distanza = lunghezzaTronchi
-                                Exit For
-                            End If
-                            diff = distanza
-                            puntiSTRMod &= pf.X.ToString("#.##").Replace(",", ".") & _
-                                "," & pf.Y.ToString("#.##").Replace(",", ".") & " "
-                        Next
-                        If distanza < lunghezzaTronchi Then ' se sono uscito dal loop senza effettuare modifiche
-                            Dim punto As Punto = calcLastPoint(pi, pf, lunghezzaTronchi - distanza, verso, i) ' in teoria lo allunga
-                            puntiSTRMod &= punto.X.ToString("#.##").Replace(",", ".") & _
-                                "," & punto.Y.ToString("#.##").Replace(",", ".") & " "
-                        End If
-
-                        If verso = True Then
-                            'se l'ultimo punto della lista non e' quello vicino all'incrocio allora devo 
-                            ' invertire l'ordine di tutti i punti 
-                            puntiSTRMod = invertiPunti(puntiSTRMod)
-                        End If
-                        m_node1.Attributes.GetNamedItem("shape").Value = puntiSTRMod
-                        m_node1.Attributes.GetNamedItem("length").Value = lunghezzaTronchi.ToString
-                        ' costruzione della junction :
-                    Next
-
-                    Dim lnkA As String, lnkB As String 'metto in ordine la stringa , lnkA va per primo
-                    'For j = 0 To links.Length - 1 Step 1
-                    '    ' devo trovare la junction , per trovare junction di linee
-
-                    '    Dim m_nodeJ As XmlNode = m_net.SelectSingleNode("//junction[@incLanes='" & _
-                    '            links(j) & "']")
-                    '    If IsNothing(m_nodeJ) Then
-                    '        m_nodeJ = m_net.SelectSingleNode("//junction[@incLanes='" & _
-                    '            links(j + 1) & "']")
-                    '    End If
-                    '    If versi(j) = True Then
-                    '        lnkA = puntiJunction(j, 0) & " " & puntiJunction(j, 1)
-                    '    Else
-                    '        lnkB = puntiJunction(j, 0) & " " & puntiJunction(j, 1)
-                    '    End If
-                    '    If versi(j + 1) = True Then
-                    '        lnkA = puntiJunction(j + 1, 0) & " " & puntiJunction(j + 1, 1)
-                    '    Else
-                    '        lnkB = puntiJunction(j + 1, 0) & " " & puntiJunction(j + 1, 1)
-                    '    End If
-                    '    m_nodeJ.Attributes.GetNamedItem("shape").Value = lnkA & " " & lnkB
-                    'Next
                 End If
+
             End If
         Next
+        Dim linkbuff(100) As String
+        Dim numlink As Short = 0
+        'recupero dati sulle possibili svolte
+        ' Dim buffLincJ(100) As String
+        Dim connlist As XmlNodeList
+        Dim tolist As XmlNodeList
+        Dim numConn As Short ' numero di combinazioni origine/destinazione
+        connlist = m_xmld.SelectNodes("net/connection")
+        Dim buffListaConn(connlist.Count - 1) As String
+        Dim origNUM As Short = -1 'numero di ORIGINI
+        For Each m_connNode In connlist
+            Dim fromAttr = m_connNode.Attributes.GetNamedItem("from").Value
+            Dim toAttr = m_connNode.Attributes.GetNamedItem("to").Value
+            Dim stateAttr = m_connNode.Attributes.GetNamedItem("state").Value
+            Dim fromLane As Short = m_connNode.Attributes.GetNamedItem("fromLane").Value
+            Dim toLane As Short = m_connNode.Attributes.GetNamedItem("toLane").Value
+            If stateAttr = "o" Then ' devo includerlo nel file ROU.XML , 
+                'connessione semaforizzata!
+                generaLabelFasi(fromAttr & "_" & fromLane & " -> " & toAttr & "_" & toLane)
+                lstFasi.Columns.Add(numlink.ToString, 25, HorizontalAlignment.Left)
+                linksORIG(numlink) = fromAttr & "_" & fromLane
+                Dim flagF As Boolean = False
+                Dim s1() As String = fromAttr.Split("_")
+                Dim s2() As String = s1(0).Split("#")
+                For t = 0 To origNUM
+                    If listaORIG(t) = s2(0) Then
+                        flagF = True
+                        Exit For
+                    End If
+                Next
+                If flagF = False Then
+                    origNUM += 1               'numero di Strade origine 
+                    listaORIG(origNUM) = s2(0) 'Salvo la lista delle strade ORIGINE
+                End If
+                Dim f1() As String = toAttr.split("_")
+                Dim f2() As String = f1(0).Split("#")
+
+
+
+                'il to attr potrebbe non essere definitivo , da questa lane potrei avere piu' destinazioni sulla junction principale
+                'devo trovare queste connessioni successive prima di continuare
+                tolist = m_xmld.SelectNodes("net/connection")
+                Dim reItera As Boolean = False ' #####################################OSTICO
+                Dim listaItera(100) As String ' se supero i 100 ... overflow!!
+                Dim totItera As Short = 0 ' il numero di iterazioni totale da eseguire
+                Dim numCiclo As Short = 0 ' il numero della iterazione corrente
+                listaItera(0) = f2(0) ' inizializzazione prima iterazione con il toLane corrente
+reStart:
+                Dim foundF As Boolean = False
+                For Each m_nodeX As XmlNode In tolist
+                    Dim fromFind As String = listaItera(numCiclo) ' imposto il Lane da cercare
+                    Dim fromAttrX As String = m_nodeX.Attributes.GetNamedItem("from").Value
+                    Dim toAttrX As String = m_nodeX.Attributes.GetNamedItem("to").Value
+                    Dim stateAttrX As String = m_nodeX.Attributes.GetNamedItem("state").Value
+                    If stateAttrX <> "o" Then
+                        Dim s3() As String = fromAttrX.Split("_")
+                        Dim s4() As String = s3(0).Split("#")
+                        Dim f3() As String = toAttrX.Split("_")
+                        Dim f4() As String = f3(0).Split("#")
+                        If s4(0) = fromFind Then ' in realta' devo controllare la mia linea "generale" non quella specifica
+                            'ok devo segnare questo , e' una possibile svolta dopo il semaforo
+                            If f4(0) <> s4(0) Then ' la considero solo se porta ad una nuova linea
+                                Dim FF As Boolean = False
+                                For z = 0 To totItera
+                                    If f4(0) = listaItera(z) Then
+                                        FF = True
+                                    End If
+                                Next
+                                If FF = False Then
+                                    totItera += 1
+                                    foundF = True
+                                    listaItera(totItera) = f4(0)
+                                End If
+                            End If
+                        End If
+                    End If
+                Next
+                If foundF = False Then ' se non ho trovato altri sviluppi per la lane , allora ho chiuso , posso scrivere la dest
+                    'la destinazione e' listaItera(totItera)
+                    flagF = False 'reset della FLAG
+                    For i = 0 To numConn - 1
+                        If buffListaConn(i) = s2(0) & "-" & listaItera(numCiclo) Then
+                            flagF = True
+                            Exit For
+                        End If
+                    Next
+                    If flagF = False Then
+                        buffListaConn(numConn) = s2(0) & "-" & listaItera(numCiclo)
+                        listaDEST(numConn) = listaItera(numCiclo) 'segno destinazione per l'attuale origine
+                        corrispondenzaOD(numConn) = origNUM 'segno la corrizpondenza origine 
+                        numConn += 1
+                    End If
+                End If
+                numCiclo += 1
+                If numCiclo <= totItera Then ' condizioni di fine iterazione
+                    GoTo reStart 'reitera!
+                End If
+                numlink += 1
+            End If
+            'aggiungo gli elementi label :calcolando pero' solo ogni tipo di FROM / TO lane senza le combinazioni di corsie
+            ' corrispondenzaTLS(numlink) = numConn
+        Next
+
+
+        'variabili importanti
+        'rounum : numero di strade di ORIGINE
+        'connNum : numero di coppie ORIGINE-DESTINAZIONE
+        'buffLinkJ : vettore temporaneo che contiene gli id delle strade di ORIGINE
+        'bufflistaConn : contiene lista di tutte le ORIGINI-DESTINAZIONI trovate , serve solo per controllo
+
+
+
+        origNUM += 1 ' perche' ho incrementato con un metodo diverso , recupero un incremento iniziale qui
+        Array.Resize(linksORIG, numlink)
+        Array.Resize(listaORIG, origNUM)
+
+
+
+
+        'For i = 0 To linksORIG.Length - 1 'devo prendere solo le strade senza tener conto del numero di linea
+        '    'di cui si occupera' automaticamente il simulator
+        '    Dim flagF As Boolean = False
+        '    Dim s() As String = linksORIG(i).Split("_")
+        '    For t = 0 To linksORIG.Length - 1
+        '        If buffLincJ(t) = s(0) Then
+        '            flagF = True
+        '            Exit For
+        '        End If
+        '    Next
+        '    If flagF = False Then
+        '        buffLincJ(contaElem) = s(0) 'salvo l'ordine delle lanes per trovare una corrispondenza
+        '        contaElem += 1
+        '    End If
+        'Next
+
+        'ReDim listaORIG(contaElem - 1)
+        'For i = 0 To contaElem - 1
+        '    listaORIG(i) = buffLincJ(i)
+        'Next
+
+
+
+        'For Each m_connNode In connlist
+        '    Dim fromAttr = m_connNode.Attributes.GetNamedItem("from").Value
+        '    Dim toAttr = m_connNode.Attributes.GetNamedItem("to").Value
+        '    Dim stateAttr = m_connNode.Attributes.GetNamedItem("state").Value
+        '    Dim fromLane As Short = m_connNode.Attributes.GetNamedItem("fromLane").Value
+        '    Dim toLane As Short = m_connNode.Attributes.GetNamedItem("toLane").Value
+        '    If stateAttr = "o" Then ' devo includerlo nel file ROU.XML , 
+        '        'devo escludere le connessioni che rappresentano le stesse svolte su corsie diverse
+        '        Dim flagF As Boolean = False
+        '        For i = 0 To numConn - 1
+        '            If buffListaConn(i) = fromAttr & toAttr Then
+        '                flagF = True
+        '                Exit For
+        '            End If
+        '        Next
+        '        If flagF = False Then
+        '            buffListaConn(numConn) = fromAttr & toAttr
+        '            numConn += 1
+        '            TrovaCorrispondenzaLineaPercorso(fromAttr, toAttr, origNUM, fromLane, toLane) 'trova corrispondenza con l' ID della linea della junction
+        '            'aggiungo le voci della tabella in TAB4
+        '            lstFasi.Columns.Add(origNUM.ToString, 25, HorizontalAlignment.Left)
+        '            'aggiungo gli elementi label 
+        '            generaLabelFasi(fromAttr & " -> " & toAttr)
+        '            origNUM += 1
+        '        End If
+        '    End If
+        'Next
+
+        'salvo le origini destinazioni delle varie strade nel file di configurazione , nella tab infine riapro
+        ' il file 
+        'creo il file di impostazione con informazioni sui tipi di veicoli e sugli arrivi/destinazioni.
+        'Sotto gestione dei veicoli riapro questo file invece di ricreare le impostazioni
+        'saveXMLconfig(fileINI, "prova", 10.33453, 0.6)
+
+        Dim fileINIexists As Boolean = False
+        If Not System.IO.File.Exists(fileINI) Then
+            System.IO.File.Create(fileINI).Dispose()
+        Else
+            fileINIexists = True
+        End If
+        'salvo il file come un XML per mantenere lo stile del progetto e avere maggiore flessibilita'
+        Dim m_xmld2 As XmlDocument = New XmlDocument()
+        'Dim prova1 As XmlNode = m_xmld.CreateXmlDeclaration("1.0", "UTF-8", "")
+        'm_xmld.AppendChild(prova1)
+
+        Dim cfgNode As XmlNode = m_xmld2.CreateElement("cfgVeic") ' creo nodo di configurazione principale
+        m_xmld2.AppendChild(cfgNode)
+
+        Dim VeicNode As XmlNode = m_xmld2.CreateElement("vType") ' per ogni tipo di veicolo 
+        Dim veicAttribute1 As XmlAttribute = m_xmld2.CreateAttribute("id") ' scrivo gli attributi
+        veicAttribute1.Value = "Standard_Auto"
+        VeicNode.Attributes.Append(veicAttribute1)
+        Dim veicAttribute As XmlAttribute = m_xmld2.CreateAttribute("accel") ' scrivo gli attributi
+        veicAttribute.Value = "0.8"
+        VeicNode.Attributes.Append(veicAttribute)
+        veicAttribute = m_xmld2.CreateAttribute("decel") ' scrivo gli attributi
+        veicAttribute.Value = "4,5"
+        VeicNode.Attributes.Append(veicAttribute)
+        veicAttribute = m_xmld2.CreateAttribute("sigma")
+        veicAttribute.Value = "0.5"
+        VeicNode.Attributes.Append(veicAttribute)
+        veicAttribute = m_xmld2.CreateAttribute("length")
+        veicAttribute.Value = "5"
+        VeicNode.Attributes.Append(veicAttribute)
+        veicAttribute = m_xmld2.CreateAttribute("minGap")
+        veicAttribute.Value = "0.5"
+        VeicNode.Attributes.Append(veicAttribute)
+        veicAttribute = m_xmld2.CreateAttribute("maxSpeed")
+        veicAttribute.Value = "30"
+        VeicNode.Attributes.Append(veicAttribute)
+        veicAttribute = m_xmld2.CreateAttribute("guiShape")
+        veicAttribute.Value = "0"
+        VeicNode.Attributes.Append(veicAttribute)
+
+
+
+        Dim toIDELEM As XmlNode ' devo recuperare il routing completo di tutte le combinazioni possibili per riempire il file cfg
+        For i = 0 To origNUM - 1
+            'per ogni linea di arrivo
+
+            generaBoxArrivi(listaORIG(i))
+            Dim ADinfo As XmlNode = m_xmld2.CreateElement("trafficInfo")
+            Dim loadAttr As XmlAttribute = m_xmld2.CreateAttribute("trafficLoad")
+            loadAttr.Value = "100"
+            ADinfo.Attributes.Append(loadAttr)
+            VeicNode.AppendChild(ADinfo)
+            Dim fromID As XmlAttribute = m_xmld2.CreateAttribute("fromLane")
+            fromID.Value = listaORIG(i) ' setto l'origine , 
+
+            ADinfo.Attributes.Append(fromID)
+            Dim numDest As Short = 0 ' inizio a calcolare la equiprobabilita' di svolta
+            Dim probDest As Double = 0
+            For f = 0 To numConn - 1
+                If corrispondenzaOD(f) = i Then ' dovra' essere modificato il valore manualmente
+                    numDest += 1
+                End If
+            Next
+            probDest = 1 / numDest
+            For m = 0 To numConn - 1
+                If corrispondenzaOD(m) = i Then
+                    generaBoxDestinazioni(i, m, listaDEST(m), probDest.ToString("#.##"))
+                    toIDELEM = m_xmld2.CreateElement("toLane")
+                    Dim toid As XmlAttribute = m_xmld2.CreateAttribute("toID")
+                    toid.Value = listaDEST(m)
+                    toIDELEM.Attributes.Append(toid)
+                    toid = m_xmld2.CreateAttribute("prob")
+                    toid.Value = probDest.ToString("n3").Replace(",", ".")
+                    toIDELEM.Attributes.Append(toid)
+                    ADinfo.AppendChild(toIDELEM)
+                End If
+            Next
+        Next
+
+        ODstdNode = m_xmld2
+        cfgNode.AppendChild(VeicNode)
+        If fileINIexists = False Then
+            m_xmld2.Save(fileINI)
+        End If
+
+        'devo creare solo i box dei dATI di traffico qui se il file gia' esiste
+
+        'For i = 0 To linksORIG.Length - 1 ' VECCHIA  VERSIONE CHE CREAVA IL BOX PRIMA DEL FILE 
+        '    generaBoxArrivi(linksORIG(i)) ' messi nello stesso ordine del file originale
+        '    Dim numDest As Short = 0
+        '    Dim probDest As Double = 0
+        '    For f = 0 To origNUM - 1 ' calcolo probabilita' di ogni svolta , Setto inizialmente equiprobabilità
+        '        If corrispondenzaOD(f) = i Then ' dovra' essere modificato il valore manualmente
+        '            numDest += 1
+        '        End If
+        '    Next
+        '    probDest = 1 / numDest
+        '    For m = 0 To origNUM - 1
+        '        If corrispondenzaOD(m) = i Then
+        '            generaBoxDestinazioni(i, m, listaDEST(m) & "_0", probDest.ToString("#.##"))
+        '        End If
+        '    Next
+        '    ' qui devo aggiungere informazioni riguardo le possibili svolte 
+        '    'quando vado a generare gli arrivi all'intersezione
+        'Next
+
+        'devo considerare tutte le direzioni dei linksORIG inclusi
+        'Dim buff() As String = linksORIG
+        'ReDim linksORIG(linksORIG.Count * 2 - 1)
+        ReDim puntiJunction(linksORIG.Count * 2 - 1, 1)  ' qui salvo i punti della junction man mano che li trovo
+        ReDim versi(linksORIG.Count * 2 - 1) 'qui dentro mi segno i versi delle junction
+        Dim j As Short = 0
+
+        'For i = 0 To buff.Length - 1
+        '    linksORIG(j) = buff(i).Replace("-", "")
+        '    linksORIG(j + 1) = "-" & buff(i).Replace("-", "")
+        '    j += 2
+        'Next
+
+        txtDebug.Text &= "Lunghezza Strade adiacenti l'incrocio di interesse: " & vbCrLf
+        For i = 0 To linksORIG.Count - 1
+            'calcolo la lunghezza della strada 
+
+            m_node1 = m_net.SelectSingleNode("//lane[@id='" & linksORIG(i) & "']") 'seleziono il nodo che mi interessa
+            Dim debtest As String = m_node1.Attributes.GetNamedItem("length").Value
+            Dim lunghezza As Double = m_node1.Attributes.GetNamedItem("length").Value.Replace(".", ",")
+
+            txtDebug.Text &= "ID:" & linksORIG(i).ToString & " , Lunghezza: " & lunghezza & vbCrLf
+            'se la lunghezza non e' 50 metri devo tagliare / accorciare l'ultimo tratto 
+            'per iniziare devo individuare il punto piu' vicino alla junction 
+            Dim ptJunct As Punto
+            ptJunct.X = Jx
+            ptJunct.Y = Jy
+            'a priori non so quale sia il punto iniziale e quello finale , devo verificarli
+            Dim puntiSTR() As String = m_node1.Attributes.GetNamedItem("shape").Value.Split(" ")
+            Dim punti(puntiSTR.Length - 1) As Punto
+            'devo inserire tutti i nodi della strada in un unico array
+            For j = 0 To puntiSTR.Length - 1
+                Dim ptbuf() As String = puntiSTR(j).Split(",")
+                If ptbuf(0) <> "" Then
+                    punti(j).X = ptbuf(0).Replace(".", ",")
+                    punti(j).Y = ptbuf(1).Replace(".", ",")
+                End If
+            Next
+            Dim pta, ptb As Punto
+            pta.X = punti(0).X
+            pta.Y = punti(0).Y
+            ptb.X = punti(punti.Length - 1).X
+            ptb.Y = punti(punti.Length - 1).Y
+            Dim verso As Boolean = ordinaPuntiMIN(ptJunct, punti)
+            ' con questa funzione  ordino i punti estremali della strada, ptA e' sempre il pt vicino all'incrocio
+            ' inoltre mi restituisce il verso della successione di nodi rispetto l'incrocio T
+            'True se il verso e' opposto 
+            'devo individuare i nodi che non mi servono
+            Dim distanza As Double
+            Dim pi As Punto
+            Dim pf As Punto
+            Dim puntiSTRMod As String = "" ' la stringa finale modificata da reinserire nel file .net.xml
+            Dim diff As Double
+            distanza = 0
+            puntiSTRMod &= punti(0).X.ToString("#.##").Replace(",", ".") & _
+                        "," & punti(0).Y.ToString("#.##").Replace(",", ".") & " "
+            For j = 0 To punti.Length - 2
+                'calcolo iterativamente la distanza dal punto iniziale 
+                pi.X = punti(j).X
+                pi.Y = punti(j).Y
+                pf.X = punti(j + 1).X
+                pf.Y = punti(j + 1).Y
+
+                distanza += Math.Sqrt((pi.X - pf.X) ^ 2 + (pi.Y - pf.Y) ^ 2)
+                If distanza > lunghezzaTronchi Then
+                    'arrivato qui dentro ho trovato l'ultimo punto da modificare
+                    Dim punto As Punto = calcLastPoint(pi, pf, lunghezzaTronchi - distanza, verso, i)
+                    pf.X = punto.X
+                    pf.Y = punto.Y
+                    puntiSTRMod &= punto.X.ToString("#.##").Replace(",", ".") & _
+                    "," & punto.Y.ToString("#.##").Replace(",", ".") & " "
+                    distanza = lunghezzaTronchi
+                    Exit For
+                End If
+                diff = distanza
+                puntiSTRMod &= pf.X.ToString("#.##").Replace(",", ".") & _
+                    "," & pf.Y.ToString("#.##").Replace(",", ".") & " "
+            Next
+            If distanza < lunghezzaTronchi Then ' se sono uscito dal loop senza effettuare modifiche
+                Dim punto As Punto = calcLastPoint(pi, pf, lunghezzaTronchi - distanza, verso, i) ' in teoria lo allunga
+                puntiSTRMod &= punto.X.ToString("#.##").Replace(",", ".") & _
+                    "," & punto.Y.ToString("#.##").Replace(",", ".") & " "
+            End If
+
+            If verso = True Then
+                'se l'ultimo punto della lista non e' quello vicino all'incrocio allora devo 
+                ' invertire l'ordine di tutti i punti 
+                puntiSTRMod = invertiPunti(puntiSTRMod)
+            End If
+            m_node1.Attributes.GetNamedItem("shape").Value = puntiSTRMod
+            m_node1.Attributes.GetNamedItem("length").Value = lunghezzaTronchi.ToString
+            ' costruzione della junction :
+        Next
+
+        Dim lnkA As String, lnkB As String 'metto in ordine la stringa , lnkA va per primo
+        'For j = 0 To linksORIG.Length - 1 Step 1
+        '    ' devo trovare la junction , per trovare junction di linee
+
+        '    Dim m_nodeJ As XmlNode = m_net.SelectSingleNode("//junction[@incLanes='" & _
+        '            linksORIG(j) & "']")
+        '    If IsNothing(m_nodeJ) Then
+        '        m_nodeJ = m_net.SelectSingleNode("//junction[@incLanes='" & _
+        '            linksORIG(j + 1) & "']")
+        '    End If
+        '    If versi(j) = True Then
+        '        lnkA = puntiJunction(j, 0) & " " & puntiJunction(j, 1)
+        '    Else
+        '        lnkB = puntiJunction(j, 0) & " " & puntiJunction(j, 1)
+        '    End If
+        '    If versi(j + 1) = True Then
+        '        lnkA = puntiJunction(j + 1, 0) & " " & puntiJunction(j + 1, 1)
+        '    Else
+        '        lnkB = puntiJunction(j + 1, 0) & " " & puntiJunction(j + 1, 1)
+        '    End If
+        '    m_nodeJ.Attributes.GetNamedItem("shape").Value = lnkA & " " & lnkB
+        'Next
+
         m_xmld.Save(txtPercSave.Text) 'salvo il file .net.xml in una nuova posizione
         btnStartSim.Enabled = True
         'Catch errorVariable As Exception
@@ -532,9 +665,9 @@ Public Class Form1
         Else
             IO.File.Delete(nuovofile)
         End If
+        '----------------------------------------SCRIVO FILE ROU--------------------------------------------------------------------
         Dim objWriter As New System.IO.StreamWriter(nuovofile, True)
         Dim stringOUTPUT As String = "<routes>" & vbCrLf
-
         Dim m_nodelist, m_nodlistchild As XmlNodeList
         Dim m_node, m_node1 As XmlNode
         Dim m_nodeChild As XmlNode
@@ -560,11 +693,11 @@ Public Class Form1
             num_vehicle += 1
         Next
 
+        '----------------------------------LEGGO DATI INSERITI NEL SOFTWARE PER LA SIMULAZIONE DAL FILE simcfg------------------------
         m_nodelist = m_nodelist(0).SelectNodes("trafficInfo")
         Dim rouNUM As Short = 0
-
         Dim svoltaNum As Short = 0
-        Dim numTronchi As Short = listaIncLanesJunction.Length
+        Dim numTronchi As Short = listaORIG.Length
         For Each m_nodeChild In m_nodelist ' qui ricavo solo rouNum
             m_nodlistchild = m_nodeChild.SelectNodes("toLane")
             For Each m_node1 In m_nodeChild
@@ -581,7 +714,6 @@ Public Class Form1
         a = 0
         For Each m_node In m_nodelist
             matrice_veicoli(a) = m_node.Attributes.GetNamedItem("id").Value
-
             m_nodelist1 = m_node.SelectNodes("trafficInfo")
             b = 0
             c = 0
@@ -596,57 +728,176 @@ Public Class Form1
             Next
             a += 1
         Next
-
         Dim r As Short = 0
-        '############################
-        '###########################
-        '############################
-        'definisco tutte le possibili svolte QUI 
-        ' queste sono tutte le possibili combinazioni I-O , sono le stesse informazioni che avrei sul file net.xml
-        'di sumo , semplicemente le riporto qui nel giusto formato . Sono tutte le connection con state "o"
-        'Ho deciso dall'inizio di non implementare la possibilita' di modificare queste connessioni.
+        '------------------------------------------SCRIVO SU FILE.ROU la lista delle rou riportando le informazioni del file simcfg e NON .net.xml
         Dim xmld As XmlDocument = New XmlDocument
         xmld.Load(txtPerc1.Text)
+        m_nodelist2 = xmld.SelectNodes("net/connection")
+        'Dim rouID As Short = 0
+        'm_nodelist = xmld.SelectNodes("net/connection")
+        'For Each m_node In m_nodelist
+        '    Dim fromAttr = m_node.Attributes.GetNamedItem("from").Value
+        '    Dim toAttr = m_node.Attributes.GetNamedItem("to").Value
+        '    Dim stateAttr = m_node.Attributes.GetNamedItem("state").Value
+        '    If stateAttr = "o" Then ' devo includerlo nel file ROU.XML
+        '        stringOUTPUT &= "<route id=""route" & rouID & """ edges=""" & fromAttr & " " & toAttr & """ />" & vbCrLf & vbCrLf
+        '        'devo trovare qui la corrispondenza con la linea della junction
+        ' TrovaCorrispondenzaLineaPercorso(fromAttr, toAttr, rouID, 0, 0) 'trova corrispondenza con l' ID della linea della junction
+        '        rouID += 1
+        '    End If
+        'Next
+
+        Dim trovaPrimoUltimo As Boolean = False ' false = trova il primo elemento true = trova l'ultimo
+        Dim stop1 As Boolean = False
         Dim rouID As Short = 0
-        m_nodelist = xmld.SelectNodes("net/connection")
+        Dim segmFrom As Short = 0 ' indica se la linea contiene diversi tronchi , divisi con # e trova l'indice iniziale
+        Dim segmTo As Short = 0
+        Dim hasSegm As Boolean = False
+        
+        m_nodelist = m_xmld.SelectNodes("cfgVeic/vType/trafficInfo")
         For Each m_node In m_nodelist
-            Dim fromAttr = m_node.Attributes.GetNamedItem("from").Value
-            Dim toAttr = m_node.Attributes.GetNamedItem("to").Value
-            Dim stateAttr = m_node.Attributes.GetNamedItem("state").Value
-            If stateAttr = "o" Then ' devo includerlo nel file ROU.XML
-                stringOUTPUT &= "<route id=""route" & rouID & """ edges=""" & fromAttr & " " & toAttr & """ />" & vbCrLf & vbCrLf
-                'devo trovare qui la corrispondenza con la linea della junction
-                TrovaCorrispondenzaLineaPercorso(fromAttr, toAttr, rouID, 0, 0) 'trova corrispondenza con l' ID della linea della junction
+            Dim fromAttr = m_node.Attributes.GetNamedItem("fromLane").Value
+            m_nodelist1 = m_node.SelectNodes("toLane")
+            For Each m_node1 In m_nodelist1
+                Dim toAttr = m_node1.Attributes.GetNamedItem("toID").Value
+                Dim fromTXT As String = fromAttr
+                Dim toTXT As String = toAttr
+                'from e to addr contengono il nome generale della lina , devo considerare il routing completo
+                Dim foundF As Boolean = False ' trovo l'elemento che sto cercando ?
+                hasSegm = False
+                While stop1 = False
+                    foundF = False
+                    For Each m_node2 In m_nodelist2
+                        Dim fromAttrNET = m_node2.Attributes.GetNamedItem("from").Value
+                        Dim toAttrNET = m_node2.Attributes.GetNamedItem("to").Value
+                        If trovaPrimoUltimo = False Then ' FASE FROM
+                            If hasSegm = False Then ' devo capire se ci sono diversi tronchi
+                                If InStr(fromAttrNET, fromAttr & "#" & segmFrom) > 0 Then
+                                    'ho scoperto che la mia lane ha diversi segmenti , al prossimo giro devo scoprire se e' quello principale
+                                    foundF = True
+                                    hasSegm = True
+                                    Exit For
+                                End If
+                            Else ' ci sono tronchi , devo capire quale e' il primo
+                                If InStr(toAttrNET, fromAttr & "#" & segmFrom) > 0 Then 'se entro qui , c'e' un tronco precedente a quello segnato
+                                    segmFrom += 1
+                                    foundF = True
+                                    Exit For
+                                End If
+                            End If
+                        Else ' FASE TO
+                            If hasSegm = False Then ' devo capire se ci sono diversi tronchi
+                                If toAttrNET = toAttr & "#" & segmTo Then
+                                    'ho scoperto che la mia lane ha diversi segmenti , al prossimo giro devo scoprire se e' quello principale
+                                    hasSegm = True
+                                    foundF = True
+                                    Exit For
+                                End If
+                            Else ' ci sono tronchi , devo capire quale e' il primo
+                                If fromAttrNET = toAttr & "#" & segmTo Then 'se entro qui , c'e' un tronco precedente a quello segnato
+                                    segmTo += 1
+                                    foundF = True
+                                    Exit For
+                                End If
+                            End If
+                        End If
+                    Next
+                    If foundF = False Then ' mi fermo qui
+                        If trovaPrimoUltimo = False Then
+                            If hasSegm = True Then
+                                fromTXT = fromTXT & "#" & segmFrom
+                            End If
+                            trovaPrimoUltimo = True ' passo al TO , seconda fase
+                            hasSegm = False
+                            segmFrom = 0
+                        Else
+                            If hasSegm = True Then
+                                toTXT = toTXT & "#" & segmFrom
+                            End If
+                            trovaPrimoUltimo = False
+                            hasSegm = False
+                            segmTo = 0
+                            Exit While
+                        End If
+                    End If
+                End While
+                'arrivato qui ho solo gli id delle strade iniziali e finali , mi serve il percorso completo 
+                ' che ricavo qui :
+                'occorrerebbe scrivere una classe apposita , tuttavia evito per risparmiare tempo
+                Dim nodi(100, 2) As String 'segno tutte le possibili diramazioni indice 2a dimensione :
+                Dim numNodi As Short = 0
+                Dim indNodoProc As Short = 0 ' l'indice del nodo che sto processando 
+                '0: lane ID
+                '1: nodoParente
+                '2: 1=nodoaperto/2=nodochiuso /""=non processato
+                nodi(0, 0) = fromTXT ' inizializzo il primo nodo con l'id della strada di partenza
+                nodi(0, 1) = -1 'segno nessun nodo di partenza come parente ///
+                nodi(0, 2) = 1 ' segno il nodo come aperto
+                While stop1 = False
+                    For Each m_node2 In m_nodelist2
+                        Dim fromAttrNET = m_node2.Attributes.GetNamedItem("from").Value
+                        Dim toAttrNET = m_node2.Attributes.GetNamedItem("to").Value
+                        If fromAttrNET = nodi(indNodoProc, 0) Then
+                            numNodi += 1
+                            nodi(numNodi, 0) = toAttrNET
+                            nodi(numNodi, 1) = indNodoProc
+                            If toAttrNET = toTXT Then
+                                'ho trovato l'ultimo nodo , chiudo ed esco dal ciclo
+                                nodi(numNodi, 2) = 2
+                                indNodoProc = numNodi
+                                Exit While
+                            Else
+                                nodi(numNodi, 2) = 1
+                            End If
+                        End If
+                    Next
+                    indNodoProc += 1
+                    nodi(0, 2) = 2 ' processato , chiudo il nodo
+                End While
+                'ricostruisco a ritroso la linea di nodi e mi ritrovo quindi la lista delle connessioni della route 
+                'in ordine inverso , devo rigirarlo
+                Dim edgeList(100) As String
+                Dim numEdges As Short = 0
+                While Not indNodoProc = -1
+                    edgeList(numEdges) = nodi(indNodoProc, 0)
+                    numEdges += 1
+                    indNodoProc = nodi(indNodoProc, 1)
+                End While
+                Array.Resize(edgeList, numEdges)
+                Array.Reverse(edgeList)
+
+                stringOUTPUT &= "<route id=""route" & rouID & """ edges="""
+                For i = 0 To numEdges - 1
+                    stringOUTPUT &= edgeList(i) & " "
+                Next
+                stringOUTPUT &= """ />" & vbCrLf
                 rouID += 1
-            End If
+            Next
         Next
 
-        'definisco OGNI POSSIBILE autoveicolo che attraversa la junction secondo una distribuzione definita 
-        Dim numCICLI As Short = txtSimDurata.Text 'TEST , devo sceglierlo a runtime
 
+
+        'definisco OGNI POSSIBILE autoveicolo che attraversa la junction secondo una distribuzione definita 
+        Dim numCICLI As Short = txtSimDurata.Text 'durata in secondi della simulazione
         'ho degli arrivi con distribuzione di POISSON di parametro Q = numero di arrivi/h ,
         'questa ipotesi cade se all'arrivo di una linea mi ritrovo un altro semaforo , in quel caso gli arrivi non sono
         'completamente casuali e non hanno distribuzione poissoniana
         'devo  capire con quale probabilita' un veicolo svoltera' in una direzione piuttosto che un'altra 
-
         Dim rand As New Random() ' qui andrebbe specificato il SEED se occorre , dare la possibilita' di specificarlo runtime
         Randomize()
         Dim veicNUM As Short = 0 'indice veicolo creato 
-
         'per capire quanti veicoli arrivano in quell'intervallo temporale devo creare degli intervalli di probabilita' 
         'con approssimazione 
-
         For i = 1 To numCICLI
             'devo calcolare iterativamente la probabilita' degli arrivi
-
-            Dim arraySvolte(listaIncLanesJunction.Length - 1, rouNUM - 1) As Short 'matrice delle coincidenze linea arrivo-svolta
+            Dim arraySvolte(listaORIG.Length - 1, rouNUM - 1) As Short 'matrice delle coincidenze linea arrivo-svolta
             For j = 0 To rouNUM - 1
                 'rouNum sono il numero di connessioni specificato sul file net.xml , 
                 'devo trovare una corrispondenza con le Lanes della junction principale 
-                arraySvolte(corrispondenzaLanes(j), j) = 1
+                arraySvolte(corrispondenzaOD(j), j) = 1
             Next
             For v = 0 To num_vehicle - 1 ' per ogni tipo di veicolo devo verificare l'evento di ingresso al tronco
-                For j = 0 To listaIncLanesJunction.Length - 1 ' per ogni linea di accesso dell'intersezione
+                For j = 0 To listaORIG.Length - 1 ' per ogni linea di accesso dell'intersezione
                     'calcolo la probabilita' della svolta su una delle possibili direzioni possibili
                     'TEST , ipotizzo per ora equiprobabilita' su tutte le possibili svolte ###########
                     'Dim numSvolte As Short = 0
@@ -656,7 +907,6 @@ Public Class Form1
                     '    End If
                     'Next
                     'devo recuperare le informazioni sulla probabilita' di svolta/ accessi
-
                     Dim probCumulata As Double = 0
                     Dim valoreRandom As Double = rand.NextDouble 'casuale da 0 a 1
                     Dim overflowProtectContatore As Short = 0
@@ -675,14 +925,12 @@ Public Class Form1
                         probCumulata += (Math.Exp(-q / 3600) * (q / 3600) ^ n) / Factorial(n) ' distribuzione poissoniana arrivi
                     End While
 
-
                     'inserisco nel file della simulazione i dati della vettura in arrivo e calcolo dove andra' a svoltare
                     'calcolo su quale linea andra' a svoltare
                     'questo per ogni vettura in arrivo , anche se scrivo sul file che arrivano piu' auto nello stesso momento ,
                     ' e' il software  che ne gestisce l'arrivo effettivo
                     For y = 0 To n - 1 ' per ogni veicolo in arrivo
                         valoreRandom = rand.NextDouble
-
                         'indice arrivo :j indice destinazione da calcolare: de
                         Dim indest As Short = 0
                         For z = 0 To rouNUM - 1 ' non ho piu' connessioni qui di quante ne ho nel file net.xml
@@ -726,16 +974,12 @@ Public Class Form1
                                     'stringOUTPUT &= "<vehicle id=""veic_" & veicNUM & """ type=""" & matrice_veicoli(v) & """ route=""route" & 6 & _
                                     '                        """ depart=""" & i & """ />" & vbCrLf 'TEST
                                     veicNUM += 1
-
                                 End If
                             End If
                         Next
                     Next
-
                 Next
             Next
-
-
         Next
         stringOUTPUT &= "</routes>"
         'ho concluso la costruzione del file 
@@ -749,6 +993,7 @@ Public Class Form1
         'creo il file di configurazione di sumo
         creaFileCfg(filename)
 
+        ' Exit Sub ' TEST
 
         'arrivato qui devo inizializzare sumo attraverso python , in quanto le librerie traci non sono compatibili con .net
         Dim filenamePY As String = Path.Combine(Directory.GetParent(System.IO.Directory.GetCurrentDirectory()).Parent.Parent.Parent.FullName)
@@ -762,7 +1007,7 @@ Public Class Form1
         Else
             guistr = filepath1 & "\sumo.exe"
         End If
-        Dim percfg As String = """" & guistr & """" & " " & """" & filepath & """ " & filename & """.sumocfg""" & " """ & filename & """" & " " & campionamenti
+        Dim percfg As String = """" & guistr & """" & " " & """" & filepath & """ " & """" & filename & ".sumocfg""" & " """ & filename & """" & " " & campionamenti
         scriptPY.StartInfo.Arguments = percfg
         scriptPY.StartInfo.FileName = filenamePY
         scriptPY.Start()
@@ -1144,6 +1389,9 @@ Public Class Form1
             itemAdd.SubItems.Add(durata)
             Dim cArr As Char() = stato
             For t = 0 To cArr.Count - 1
+                'per ogni connessione con stato 'o' ho una lettera , devo attingere alla var corrispondenza o-d per capire se inserire
+                'o no l'item nel grafico o e' inutile in quanto non aggiunge informazioni
+
                 itemAdd.SubItems.Add(cArr(t))
                 itemAdd.UseItemStyleForSubItems = False
                 Select Case cArr(t)
@@ -1401,7 +1649,7 @@ Public Class Form1
         "--log " & """" & percn & "/" & "log.txt"" " & _
         "--remove-edges.isolated true " & _
         "--try-join-tls " & _
-        "--tls.guess-signals.dist 100 " & _
+        "--tls.guess-signals.dist 999 " & _
         "--tls.guess-signals true " & _
         "--remove-edges.by-vclass hov,taxi,bus,delivery,transport,lightrail,cityrail,rail_slow,rail_fast,motorcycle,bicycle,pedestrian " & _
         "--tls.guess true " & _

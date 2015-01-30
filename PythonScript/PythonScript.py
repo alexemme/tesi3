@@ -76,6 +76,6 @@ def run():
 
 #print(percSumo)
 #raw_input("Press enter to continue")
-sumoProcess = subprocess.Popen([percSumo, "-c", nomefilePerc + "/" + nomefile, "--tripinfo-output", nomefilePerc + "/" + "tripinfo.xml", "--remote-port", str(PORT)], stdout=sys.stdout, stderr=sys.stderr)
+sumoProcess = subprocess.Popen([percSumo, "-c",  nomefilePerc + '/' + nomefile , "--tripinfo-output", nomefilePerc + "/" + "tripinfo.xml", "--remote-port", str(PORT)], stdout=sys.stdout, stderr=sys.stderr)
 run()
 sumoProcess.wait()
